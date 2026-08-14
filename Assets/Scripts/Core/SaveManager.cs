@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 
-namespace ZombieMiner.Core
+namespace DeadRig.Core
 {
     /// <summary>Запись в очереди исследований.</summary>
     [Serializable]

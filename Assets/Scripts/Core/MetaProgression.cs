@@ -1,4 +1,4 @@
-namespace ZombieMiner.Core
+namespace DeadRig.Core
 {
     /// <summary>Престиж: сброс прогресса ради постоянного множителя дохода.</summary>
     public class MetaProgression

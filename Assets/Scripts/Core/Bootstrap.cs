@@ -1,10 +1,10 @@
 using UnityEngine;
 
-namespace ZombieMiner.Core
+namespace DeadRig.Core
 {
     /// <summary>
     /// Создаёт GameManager, если его ещё нет в сцене.
-    /// Вешайте на любой GameObject (или используйте меню ZombieMiner → Создать сцену).
+    /// Вешайте на любой GameObject (или используйте меню DeadRig → Создать сцену).
     /// </summary>
     public class Bootstrap : MonoBehaviour
     {

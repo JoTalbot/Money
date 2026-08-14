@@ -3,21 +3,21 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 
-namespace ZombieMiner.EditorTools
+namespace DeadRig.EditorTools
 {
     /// <summary>
     /// Создаёт стартовую сцену с Bootstrap-объектом и добавляет её в Build Settings.
-    /// Меню: ZombieMiner → Создать сцену.
+    /// Меню: DeadRig → Создать сцену.
     /// </summary>
     public static class SetupScene
     {
-        [MenuItem("ZombieMiner/Создать сцену")]
+        [MenuItem("DeadRig/Создать сцену")]
         public static void CreateScene()
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
 
             var go = new GameObject("Bootstrap");
-            go.AddComponent<ZombieMiner.Core.Bootstrap>();
+            go.AddComponent<DeadRig.Core.Bootstrap>();
 
             if (!AssetDatabase.IsValidFolder("Assets/Scenes"))
                 AssetDatabase.CreateFolder("Assets", "Scenes");
@@ -27,7 +27,7 @@ namespace ZombieMiner.EditorTools
 
             EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(path, true) };
 
-            Debug.Log("[ZombieMiner] Сцена создана: " + path);
+            Debug.Log("[DeadRig] Сцена создана: " + path);
         }
     }
 }

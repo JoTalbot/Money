@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace ZombieMiner.Core
+namespace DeadRig.Core
 {
     /// <summary>
     /// Исследования в стиле X-COM/UFO: проекты с временем выполнения и слотами (лаборатории).

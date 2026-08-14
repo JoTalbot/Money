@@ -1,4 +1,4 @@
-# Money — сверххитовая Android-игра
+# Money — DeadRig (сверххитовая Android-игра)
 
 Проект по созданию прибыльной Android-игры.
 

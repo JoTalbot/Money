@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace ZombieMiner.Core
+namespace DeadRig.Core
 {
     /// <summary>Рецепт крафта (производства предмета).</summary>
     public class RecipeDef

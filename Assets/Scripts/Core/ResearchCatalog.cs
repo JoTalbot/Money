@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace ZombieMiner.Core
+namespace DeadRig.Core
 {
     /// <summary>Тип эффекта исследования.</summary>
     public enum EffectType

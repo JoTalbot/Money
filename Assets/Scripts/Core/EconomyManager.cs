@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace ZombieMiner.Core
+namespace DeadRig.Core
 {
     /// <summary>
     /// Единая точка экономики. Источники и стоки валюты/ресурсов проходят ТОЛЬКО через этот класс.

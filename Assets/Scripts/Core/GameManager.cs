@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace ZombieMiner.Core
+namespace DeadRig.Core
 {
     /// <summary>
     /// Точка входа игры. Живёт в единственном GameObject'е сцены (создаётся Bootstrap'ом).

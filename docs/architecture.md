@@ -1,17 +1,17 @@
-# Архитектура — Zombie Miner (рабочее название)
+# Архитектура — DeadRig
 
 ## 1. Стек
 
 - **Движок:** Unity 6 LTS (6000.x), C#.
 - **Цель:** Android (позже возможно iOS).
-- **Рендер:** 2D (пиксель-арт или мульт — решить на этапе арта).
+- **Рендер:** 3D, **low-poly** стиль (утверждено владельцем).
 - **Сейвы:** локальный JSON (`Application.persistentDataPath`), версия внутри сейва (`SaveData.version`, сейчас 2) + `Sanitize()` для миграций.
 
 ## 2. Структура проекта
 
 ```
 Assets/
-├── Scenes/            # Main.unity (создаётся через меню ZombieMiner → Создать сцену)
+├── Scenes/            # Main.unity (создаётся через меню DeadRig → Создать сцену)
 ├── Scripts/
 │   ├── Core/          # Ядро: GameManager, EconomyManager, WaveManager, SaveManager,
 │   │                  # MetaProgression, ResearchManager, CraftingManager,

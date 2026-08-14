@@ -8,7 +8,7 @@
 1. Установи **Unity Hub** и **Unity 6 LTS (6000.x)** с модулем **Android Build Support**.
 2. В Unity Hub: **Add → Add project from disk** → выбери папку репозитория (корень).
 3. Открой проект (первое открытие сгенерирует `Library/` — это нормально, в git не попадает).
-4. В меню: **ZombieMiner → Создать сцену** (создаст `Assets/Scenes/Main.unity` с Bootstrap-объектом).
+4. В меню: **DeadRig → Создать сцену** (создаст `Assets/Scenes/Main.unity` с Bootstrap-объектом).
 5. Нажми **Play** — в консоли видно, что GameManager запустился, экономика тикает, сейв пишется в `Application.persistentDataPath`.
 
 ## Что уже есть

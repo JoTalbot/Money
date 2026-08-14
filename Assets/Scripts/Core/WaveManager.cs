@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace ZombieMiner.Core
+namespace DeadRig.Core
 {
     /// <summary>Управление волнами зомби: номер волны, число врагов, HP, событие очистки.</summary>
     public class WaveManager

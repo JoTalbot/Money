@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace ZombieMiner.Core
+namespace DeadRig.Core
 {
     /// <summary>
     /// Крафт/производство предметов (мануфактура в стиле X-COM/UFO):
