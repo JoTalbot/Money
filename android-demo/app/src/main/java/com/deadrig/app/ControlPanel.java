@@ -74,6 +74,7 @@ public final class ControlPanel {
         LinearLayout list = content(dialog);
         addMetric(activity, list, "ОБЩИЙ УРОВЕНЬ", String.valueOf(state.turretLevel));
         addMetric(activity, list, "УСТАНОВЛЕНО / РЕЗЕРВ", state.turretCount() + " / " + state.pendingTowerCount());
+        addMetric(activity, list, "ДОРОЖНЫЕ МИНЫ", String.valueOf(state.mineCharges()));
         addMetric(activity, list, "БОНУСЫ", "+" + percent(state.turretDamageBonus()) + " урон  •  +"
                 + percent(state.turretFireRateBonus()) + " темп  •  +" + String.format(Locale.US, "%.1f", state.turretRangeBonus()) + " дальность");
         addMetric(activity, list, "РУЧНОЕ ОРУЖИЕ", state.manualWeaponName() + "  ур." + state.manualWeaponLevel()
@@ -114,12 +115,11 @@ public final class ControlPanel {
                 "Повышает базовый урон всего оборонного контура.\nСтоимость: " + GameState.fmt(state.turretUpgradeCost()) + " хешей",
                 "УСИЛИТЬ", true, v -> result(activity, state.tryUpgradeTurret(), changed, dialog));
 
-        String[] names = {"", "Пулемётная", "Лазерная", "Тесла", "Крио"};
+        String[] names = {"", "Пулемётная", "Лазерная", "Тесла", "Крио", "Ракетная", "Поддержка"};
         for (int i = 0; i < GameState.TOWER_SLOTS.length; i++) {
             int type = state.towerTypeAt(i);
             if (type != 0) addCard(activity, list, "Площадка " + (i + 1) + "  //  " + names[type],
-                    type == 1 ? "Высокий темп, стандартный урон" : type == 2 ? "Двойной урон и повышенная дальность"
-                            : type == 3 ? "Цепная молния по группе" : "Замедляет врагов крио-зарядами",
+                    towerDescription(type),
                     null, false, null);
         }
         addHint(activity, list, "Чтобы установить башню из резерва, закройте экран и нажмите на светящуюся свободную площадку у дороги.");
@@ -129,11 +129,29 @@ public final class ControlPanel {
     public static void showTower(Activity activity, GameState state, int slot, OnChanged changed) {
         int type = state.towerTypeAt(slot);
         if (type == 0) return;
-        String[] names = {"", "ПУЛЕМЁТНАЯ БАШНЯ", "ЛАЗЕРНАЯ БАШНЯ", "ТЕСЛА-БАШНЯ", "КРИО-БАШНЯ"};
+        String[] names = {"", "ПУЛЕМЁТНАЯ БАШНЯ", "ЛАЗЕРНАЯ БАШНЯ", "ТЕСЛА-БАШНЯ", "КРИО-БАШНЯ", "РАКЕТНАЯ БАШНЯ", "БАШНЯ ПОДДЕРЖКИ"};
         Dialog dialog = create(activity, names[type], "Монтажная площадка " + (slot + 1));
         LinearLayout list = content(dialog);
         addMetric(activity, list, "ЛОКАЛЬНЫЙ УРОВЕНЬ", String.valueOf(state.towerLevelAt(slot)));
         addMetric(activity, list, "ГЛОБАЛЬНЫЙ УРОВЕНЬ", String.valueOf(state.turretLevel));
+        addMetric(activity, list, "РАДИУС", String.format(Locale.US, "%.1f", state.towerRangeAt(slot)));
+        addMetric(activity, list, "СПЕЦИАЛИЗАЦИЯ", state.towerBranchName(slot));
+        addCard(activity, list, "Приоритет цели", state.towerPriorityName(slot), "СМЕНИТЬ ПРИОРИТЕТ", true,
+                v -> result(activity, state.cycleTowerPriority(slot), changed, dialog));
+        if (state.towerBranchAt(slot) == 0) {
+            addCard(activity, list, "Ветка: урон", "+45% урона", "ВЫБРАТЬ", true,
+                    v -> result(activity, state.chooseTowerBranch(slot, 1), changed, dialog));
+            addCard(activity, list, "Ветка: дальность", "+1.5 к радиусу", "ВЫБРАТЬ", true,
+                    v -> result(activity, state.chooseTowerBranch(slot, 2), changed, dialog));
+            addCard(activity, list, "Ветка: темп", "+54% к темпу огня", "ВЫБРАТЬ", true,
+                    v -> result(activity, state.chooseTowerBranch(slot, 3), changed, dialog));
+        }
+        if (state.towerLevelAt(slot) >= 5 && state.towerEvolutionAt(slot) == 0 && type <= 4) {
+            addCard(activity, list, evolutionName(type, 1), evolutionDescription(type, 1), "ЭВОЛЮЦИЯ A", true,
+                    v -> result(activity, state.evolveTower(slot, 1), changed, dialog));
+            addCard(activity, list, evolutionName(type, 2), evolutionDescription(type, 2), "ЭВОЛЮЦИЯ B", true,
+                    v -> result(activity, state.evolveTower(slot, 2), changed, dialog));
+        }
         addCard(activity, list, "Локальное усиление",
                 "Увеличивает урон только этой башни.\nСтоимость: " + GameState.fmt(state.towerUpgradeCost(slot)) + " хешей",
                 "УЛУЧШИТЬ", true, v -> result(activity, state.tryUpgradeTower(slot), changed, dialog));
@@ -195,12 +213,38 @@ public final class ControlPanel {
         dialog.show(); fit(dialog);
     }
 
+    private static String evolutionName(int type, int variant) {
+        if (type == 1) return variant == 1 ? "Миниган" : "Бронебойная пушка";
+        if (type == 2) return variant == 1 ? "Дальний луч" : "Прожигающий лазер";
+        if (type == 3) return variant == 1 ? "Цепной каскад" : "Электрический шторм";
+        return variant == 1 ? "Глубокая заморозка" : "Хрупкий лёд";
+    }
+
+    private static String evolutionDescription(int type, int variant) {
+        if (type == 1) return variant == 1 ? "Резко повышает темп" : "Пробивает броню";
+        if (type == 2) return variant == 1 ? "Увеличивает дальность" : "Поджигает цель";
+        if (type == 3) return variant == 1 ? "До пяти цепей" : "Урон всем рядом";
+        return variant == 1 ? "Замедление длится 6 секунд" : "Цель получает больше урона";
+    }
+
+    private static String towerDescription(int type) {
+        if (type == 1) return "Высокий темп, стандартный урон";
+        if (type == 2) return "Двойной урон и повышенная дальность";
+        if (type == 3) return "Цепная молния по группе";
+        if (type == 4) return "Замедляет врагов крио-зарядами";
+        if (type == 5) return "Ракеты с большим радиусом взрыва";
+        return "Усиливает соседние башни на 18%";
+    }
+
     private static String recipeDescription(String item) {
         if ("turret_basic".equals(item)) return "Быстрая универсальная башня";
         if ("turret_laser".equals(item)) return "Двойной урон и увеличенная дальность";
         if ("turret_tesla".equals(item)) return "Цепная молния поражает до трёх целей";
         if ("turret_cryo".equals(item)) return "Замедляет врага на 52% на 3.2 секунды";
         if ("turret_module".equals(item)) return "+1 к общему уровню всех башен";
+        if ("turret_rocket".equals(item)) return "Ракетный взрыв поражает большую группу";
+        if ("turret_support".equals(item)) return "+18% урона соседним башням";
+        if ("road_mines".equals(item)) return "Три автоматические мины на маршрутах";
         if ("wall".equals(item)) return "+20 к максимальному HP базы и ремонт";
         if ("weapon_auto".equals(item)) return "Высокий темп ручного огня при удержании";
         if ("weapon_shotgun".equals(item)) return "Дробь наносит урон группе зомби";

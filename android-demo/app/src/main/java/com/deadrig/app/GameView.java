@@ -84,6 +84,7 @@ public class GameView extends View {
         drawBackground(c, w, h);
         drawArena(c);
         drawRoutesAndSlots(c);
+        drawSelectedTowerRange(c);
         drawSpawnRifts(c);
         drawSortedActors(c);
         drawCombatDrone(c);
@@ -153,6 +154,17 @@ public class GameView extends View {
         }
     }
 
+    private void drawSelectedTowerRange(Canvas c) {
+        int slot = gs.selectedTowerSlot();
+        if (slot < 0 || gs.towerTypeAt(slot) == 0) return;
+        PointF p = iso(GameState.TOWER_SLOTS[slot][0], GameState.TOWER_SLOTS[slot][1]);
+        float range = (float) gs.towerRangeAt(slot) * unit;
+        paint.setColor(Color.argb(24, 64, 231, 225));
+        c.drawOval(p.x - range, p.y - range * .5f, p.x + range, p.y + range * .5f, paint);
+        stroke.setColor(Color.argb(145, 64, 231, 225)); stroke.setStrokeWidth(unit * .035f);
+        c.drawOval(p.x - range, p.y - range * .5f, p.x + range, p.y + range * .5f, stroke);
+    }
+
     /** Объёмная дорога tower defense и фиксированные монтажные площадки. */
     private void drawRoutesAndSlots(Canvas c) {
         for (double[][] route : GameState.PATHS) {
@@ -175,6 +187,13 @@ public class GameView extends View {
             stroke.setPathEffect(new DashPathEffect(new float[]{unit * .28f, unit * .22f}, 0));
             c.drawPath(path, stroke);
             stroke.setPathEffect(null);
+        }
+
+        double[][] minePoints = {{-2.8, .9}, {.8, -2.8}, {2.7, -.8}};
+        for (int i = 0; i < Math.min(3, gs.mineCharges()); i++) {
+            PointF mine = iso(minePoints[i][0], minePoints[i][1]);
+            paint.setColor(Color.rgb(91, 48, 35)); diamond(c, mine.x, mine.y, unit * .22f, unit * .10f, paint);
+            paint.setColor(RED); c.drawCircle(mine.x, mine.y - unit * .05f, unit * .055f, paint);
         }
 
         for (int i = 0; i < GameState.TOWER_SLOTS.length; i++) {
@@ -319,6 +338,13 @@ public class GameView extends View {
         // Нижняя бронированная платформа.
         prism(c, p.x, p.y + s * .45f, s * 1.72f, s * .76f, s * .42f,
                 Color.rgb(62, 80, 83), Color.rgb(28, 42, 45), Color.rgb(20, 33, 36));
+        int wallTier = Math.min(4, Math.max(0, ((int) gs.baseMaxHp - 100) / 20));
+        for (int i = 0; i < wallTier; i++) {
+            float side = i % 2 == 0 ? -1 : 1;
+            float row = i / 2;
+            prism(c, p.x + side * s * (1.55f + row * .22f), p.y + s * (.20f + row * .18f),
+                    s * .34f, s * .18f, s * .55f, Color.rgb(86, 99, 101), Color.rgb(41, 55, 58), Color.rgb(29, 43, 46));
+        }
         // Центральный бункер.
         prism(c, p.x, p.y - s * .38f, s * 1.05f, s * .51f, s * 1.22f,
                 Color.rgb(83, 104, 106), Color.rgb(43, 61, 64), Color.rgb(31, 48, 51));
@@ -358,7 +384,8 @@ public class GameView extends View {
         paint.setColor(Color.argb(90, 0, 0, 0)); c.drawOval(p.x - s, p.y + s * .72f, p.x + s, p.y + s * 1.08f, paint);
         prism(c, p.x, p.y + s * .42f, s, s * .48f, s * .50f,
                 Color.rgb(77, 94, 97), Color.rgb(37, 53, 56), Color.rgb(27, 43, 46));
-        int towerTop = t.type == 4 ? Color.rgb(74, 151, 172) : t.type == 3 ? Color.rgb(113, 73, 145)
+        int towerTop = t.type == 6 ? Color.rgb(48, 139, 103) : t.type == 5 ? Color.rgb(142, 68, 46)
+                : t.type == 4 ? Color.rgb(74, 151, 172) : t.type == 3 ? Color.rgb(113, 73, 145)
                 : t.type == 2 ? Color.rgb(71, 84, 132) : Color.rgb(91, 107, 108);
         prism(c, p.x, p.y - s * .10f, s * .72f, s * .35f, s * .68f,
                 towerTop, Color.rgb(43, 56, 62), Color.rgb(30, 44, 49));
@@ -370,10 +397,15 @@ public class GameView extends View {
         dx /= len; dy /= len;
         stroke.setStrokeWidth(s * .22f); stroke.setColor(Color.rgb(18, 28, 32));
         c.drawLine(p.x, p.y - s * .52f, p.x + dx * s * 1.35f, p.y - s * .52f + dy * s * 1.35f, stroke);
-        int energyColor = t.type == 4 ? Color.rgb(118, 222, 255) : t.type == 3 ? Color.rgb(206, 105, 255) : t.type == 2 ? CYAN : ORANGE;
+        int energyColor = t.type == 6 ? Color.rgb(104, 255, 165) : t.type == 5 ? Color.rgb(255, 103, 55)
+                : t.type == 4 ? Color.rgb(118, 222, 255) : t.type == 3 ? Color.rgb(206, 105, 255) : t.type == 2 ? CYAN : ORANGE;
         stroke.setStrokeWidth(s * .08f); stroke.setColor(energyColor);
         c.drawLine(p.x + dx * s, p.y - s * .52f + dy * s, p.x + dx * s * 1.4f, p.y - s * .52f + dy * s * 1.4f, stroke);
         paint.setColor(energyColor); c.drawCircle(p.x, p.y - s * .75f, s * .16f, paint);
+        if (t.type == 6) {
+            stroke.setColor(Color.argb(125, 104, 255, 165)); stroke.setStrokeWidth(s * .07f);
+            c.drawCircle(p.x, p.y, s * 1.45f, stroke);
+        }
         if (t.level > 1) {
             paint.setColor(Color.rgb(8, 19, 22)); c.drawCircle(p.x + s * .72f, p.y - s * .70f, s * .27f, paint);
             paint.setColor(energyColor); paint.setTextAlign(Paint.Align.CENTER); paint.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);

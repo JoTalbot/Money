@@ -49,6 +49,12 @@ public class Defs {
 
         r = new ResearchDef(); r.id = "r_module"; r.name = "Модульная оборона"; r.desc = "Открывает крафт комплекта усиления";
         r.requiresId = "r_dmg"; r.costHashes = 380; r.costScrap = 100; r.durationSec = 260; r.effectType = -1; RESEARCH.add(r);
+        r = new ResearchDef(); r.id = "r_rocket"; r.name = "Ракетная платформа"; r.desc = "Открывает башню с большим радиусом взрыва";
+        r.requiresId = "r_dmg"; r.costHashes = 620; r.costScrap = 190; r.durationSec = 380; r.effectType = -1; RESEARCH.add(r);
+        r = new ResearchDef(); r.id = "r_support"; r.name = "Поле поддержки"; r.desc = "Открывает усилитель соседних башен";
+        r.requiresId = "r_range"; r.costHashes = 700; r.costScrap = 210; r.durationSec = 420; r.effectType = -1; RESEARCH.add(r);
+        r = new ResearchDef(); r.id = "r_traps"; r.name = "Инженерные ловушки"; r.desc = "Открывает дорожные мины";
+        r.requiresId = "r_scrap"; r.costHashes = 260; r.costScrap = 90; r.durationSec = 190; r.effectType = -1; RESEARCH.add(r);
 
         // Отдельная ветка ручного оружия оператора.
         r = new ResearchDef(); r.id = "r_weapon_auto"; r.name = "Автомат оператора"; r.desc = "Открывает автоматический огонь";
@@ -95,6 +101,12 @@ public class Defs {
 
         c = new RecipeDef(); c.id = "turret_module"; c.name = "Комплект усиления"; c.outItem = "turret_module";
         c.requiresResearchId = "r_module"; c.costHashes = 180; c.costScrap = 75; c.durationSec = 100; RECIPES.add(c);
+        c = new RecipeDef(); c.id = "turret_rocket"; c.name = "Ракетная башня"; c.outItem = "turret_rocket";
+        c.requiresResearchId = "r_rocket"; c.costHashes = 340; c.costScrap = 150; c.durationSec = 170; RECIPES.add(c);
+        c = new RecipeDef(); c.id = "turret_support"; c.name = "Башня поддержки"; c.outItem = "turret_support";
+        c.requiresResearchId = "r_support"; c.costHashes = 300; c.costScrap = 145; c.durationSec = 160; RECIPES.add(c);
+        c = new RecipeDef(); c.id = "road_mines"; c.name = "Комплект дорожных мин"; c.outItem = "road_mines";
+        c.requiresResearchId = "r_traps"; c.costHashes = 90; c.costScrap = 55; c.durationSec = 60; RECIPES.add(c);
 
         c = new RecipeDef(); c.id = "weapon_auto"; c.name = "Автомат оператора"; c.outItem = "weapon_auto";
         c.requiresResearchId = "r_weapon_auto"; c.costHashes = 80; c.costScrap = 30; c.durationSec = 45; RECIPES.add(c);

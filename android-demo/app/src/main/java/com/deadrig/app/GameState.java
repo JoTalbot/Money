@@ -95,11 +95,19 @@ public class GameState {
     };
     private final int[] placedTowerTypes = new int[TOWER_SLOTS.length]; // 0 пусто, 1 пулемёт, 2 лазер, 3 тесла
     private final int[] towerLevels = new int[TOWER_SLOTS.length];
+    private final int[] towerPriorities = new int[TOWER_SLOTS.length]; // 0 ближний, 1 сильный, 2 быстрый, 3 броня, 4 босс
+    private final int[] towerBranches = new int[TOWER_SLOTS.length]; // 0 баланс, 1 урон, 2 дальность, 3 темп
+    private final int[] towerEvolutions = new int[TOWER_SLOTS.length]; // 0 нет, 1 вариант A, 2 вариант B
     private int movingTowerSlot = -1;
+    private int selectedTowerSlot = -1;
     private int basicTurrets = 0;
     private int laserTurrets = 0;
     private int teslaTurrets = 0;
     private int cryoTurrets = 0;
+    private int rocketTurrets = 0;
+    private int supportTurrets = 0;
+    private int mineCharges = 0;
+    private double mineCooldown = 0;
     private double fireRateMult = 0;
     private double rangeBonus = 0;
 
@@ -172,8 +180,10 @@ public class GameState {
         hashes = 0; scrap = 0; minerLevel = 1; turretLevel = 1; manualWeaponLevel = 1;
         manualAmmo = manualMagazineSize(); manualHeat = 0; manualReloadTimer = 0; manualCombo = 0; ultimateCharge = 0;
         wave = 0; waveActive = false; zombies.clear(); projectiles.clear(); hitEffects.clear();
-        basicTurrets = laserTurrets = teslaTurrets = cryoTurrets = 0;
-        for (int i = 0; i < placedTowerTypes.length; i++) { placedTowerTypes[i] = 0; towerLevels[i] = 0; }
+        basicTurrets = laserTurrets = teslaTurrets = cryoTurrets = rocketTurrets = supportTurrets = 0; mineCharges = 0;
+        for (int i = 0; i < placedTowerTypes.length; i++) {
+            placedTowerTypes[i] = towerLevels[i] = towerPriorities[i] = towerBranches[i] = towerEvolutions[i] = 0;
+        }
         placedTowerTypes[0] = 1; towerLevels[0] = 1; syncTurrets();
         return "Новый узел запущен. Бонус дохода: +" + (prestigeLevel * 50) + "%";
     }
@@ -214,13 +224,36 @@ public class GameState {
     public double manualUpgradeCost() { return 20.0 * Math.pow(1.7, manualWeaponLevel - 1); }
     public int turretCount() { return placedTowerCount(); }
     public int pendingTowerCount() {
-        return Math.max(0, 1 + basicTurrets + laserTurrets + teslaTurrets + cryoTurrets - placedTowerCount());
+        return Math.max(0, 1 + basicTurrets + laserTurrets + teslaTurrets + cryoTurrets
+                + rocketTurrets + supportTurrets - placedTowerCount());
     }
     public int towerTypeAt(int slot) {
         return slot >= 0 && slot < placedTowerTypes.length ? placedTowerTypes[slot] : 0;
     }
     public int towerLevelAt(int slot) {
         return slot >= 0 && slot < towerLevels.length ? Math.max(1, towerLevels[slot]) : 1;
+    }
+    public int towerPriorityAt(int slot) { return validSlot(slot) ? towerPriorities[slot] : 0; }
+    public int towerBranchAt(int slot) { return validSlot(slot) ? towerBranches[slot] : 0; }
+    public int towerEvolutionAt(int slot) { return validSlot(slot) ? towerEvolutions[slot] : 0; }
+    public int selectedTowerSlot() { return selectedTowerSlot; }
+    public int mineCharges() { return mineCharges; }
+    public void selectTower(int slot) { selectedTowerSlot = validSlot(slot) ? slot : -1; }
+    private boolean validSlot(int slot) { return slot >= 0 && slot < TOWER_SLOTS.length; }
+    public String towerPriorityName(int slot) {
+        String[] names = {"Ближайший", "Самый сильный", "Самый быстрый", "Бронированный", "Босс"};
+        return names[towerPriorityAt(slot)];
+    }
+    public String towerBranchName(int slot) {
+        String[] names = {"Сбалансированная", "Урон", "Дальность", "Скорострельность"};
+        return names[towerBranchAt(slot)];
+    }
+    public double towerRangeAt(int slot) {
+        int type = towerTypeAt(slot);
+        double base = 4.0 + rangeBonus + (type == 2 ? .8 : type == 4 ? .5 : 0);
+        if (towerBranchAt(slot) == 2) base += 1.5;
+        if (towerEvolutionAt(slot) == 1 && type == 2) base += .8;
+        return base;
     }
     public double towerUpgradeCost(int slot) { return 25.0 * Math.pow(towerLevelAt(slot), 1.65); }
     public boolean isMovingTower() { return movingTowerSlot >= 0; }
@@ -237,29 +270,38 @@ public class GameState {
         if (movingTowerSlot >= 0) {
             placedTowerTypes[slot] = placedTowerTypes[movingTowerSlot];
             towerLevels[slot] = towerLevels[movingTowerSlot];
+            towerPriorities[slot] = towerPriorities[movingTowerSlot];
+            towerBranches[slot] = towerBranches[movingTowerSlot];
+            towerEvolutions[slot] = towerEvolutions[movingTowerSlot];
             placedTowerTypes[movingTowerSlot] = 0;
-            towerLevels[movingTowerSlot] = 0;
+            towerLevels[movingTowerSlot] = towerPriorities[movingTowerSlot] = towerBranches[movingTowerSlot] = towerEvolutions[movingTowerSlot] = 0;
             movingTowerSlot = -1;
             syncTurrets();
             return "Башня перемещена";
         }
-        int placedBasic = 0, placedLaser = 0, placedTesla = 0, placedCryo = 0;
+        int placedBasic = 0, placedLaser = 0, placedTesla = 0, placedCryo = 0, placedRocket = 0, placedSupport = 0;
         for (int type : placedTowerTypes) {
             if (type == 1) placedBasic++;
             else if (type == 2) placedLaser++;
             else if (type == 3) placedTesla++;
             else if (type == 4) placedCryo++;
+            else if (type == 5) placedRocket++;
+            else if (type == 6) placedSupport++;
         }
         int type = 0;
-        if (placedCryo < cryoTurrets) type = 4;
+        if (placedSupport < supportTurrets) type = 6;
+        else if (placedRocket < rocketTurrets) type = 5;
+        else if (placedCryo < cryoTurrets) type = 4;
         else if (placedTesla < teslaTurrets) type = 3;
         else if (placedLaser < laserTurrets) type = 2;
         else if (placedBasic < 1 + basicTurrets) type = 1;
         if (type == 0) return "Сначала создайте башню в цехе";
         placedTowerTypes[slot] = type;
         towerLevels[slot] = 1;
+        towerPriorities[slot] = towerBranches[slot] = towerEvolutions[slot] = 0;
         syncTurrets();
-        return type == 4 ? "Крио-башня установлена" : type == 3 ? "Тесла-башня установлена"
+        return type == 6 ? "Башня поддержки установлена" : type == 5 ? "Ракетная башня установлена"
+                : type == 4 ? "Крио-башня установлена" : type == 3 ? "Тесла-башня установлена"
                 : type == 2 ? "Лазерная башня установлена" : "Башня установлена";
     }
 
@@ -271,6 +313,29 @@ public class GameState {
         towerLevels[slot] = towerLevelAt(slot) + 1;
         syncTurrets();
         return "Башня улучшена до уровня " + towerLevels[slot];
+    }
+
+    public String cycleTowerPriority(int slot) {
+        if (towerTypeAt(slot) == 0) return "Башня не найдена";
+        towerPriorities[slot] = (towerPriorities[slot] + 1) % 5;
+        syncTurrets(); return "Приоритет: " + towerPriorityName(slot);
+    }
+
+    public String chooseTowerBranch(int slot, int branch) {
+        if (towerTypeAt(slot) == 0 || branch < 1 || branch > 3) return "Неверная специализация";
+        if (towerLevelAt(slot) < 3) return "Специализация доступна с уровня 3";
+        if (towerBranches[slot] != 0 && towerBranches[slot] != branch) return "Специализация уже выбрана";
+        towerBranches[slot] = branch; syncTurrets(); return "Выбрана ветка: " + towerBranchName(slot);
+    }
+
+    public String evolveTower(int slot, int evolution) {
+        if (towerTypeAt(slot) == 0 || evolution < 1 || evolution > 2) return "Неверная эволюция";
+        if (towerLevelAt(slot) < 5) return "Эволюция доступна с уровня 5";
+        if (towerEvolutions[slot] != 0) return "Башня уже эволюционировала";
+        double cost = 180 + towerTypeAt(slot) * 35;
+        if (scrap < cost) return "Нужно " + fmt(cost) + " лома";
+        scrap -= cost; towerEvolutions[slot] = evolution; syncTurrets();
+        return "Эволюция башни завершена";
     }
 
     public String equipManualWeapon(int type) {
@@ -395,10 +460,13 @@ public class GameState {
         } else if (type == 2) laserTurrets--;
         else if (type == 3) teslaTurrets--;
         else if (type == 4) cryoTurrets--;
-        double refund = (type == 4 ? 50 : type == 3 ? 65 : type == 2 ? 25 : 8) + towerLevelAt(slot) * 4;
+        else if (type == 5) rocketTurrets--;
+        else if (type == 6) supportTurrets--;
+        double refund = (type == 6 ? 55 : type == 5 ? 70 : type == 4 ? 50 : type == 3 ? 65 : type == 2 ? 25 : 8)
+                + towerLevelAt(slot) * 4;
         scrap += refund;
         placedTowerTypes[slot] = 0;
-        towerLevels[slot] = 0;
+        towerLevels[slot] = towerPriorities[slot] = towerBranches[slot] = towerEvolutions[slot] = 0;
         if (movingTowerSlot == slot) movingTowerSlot = -1;
         syncTurrets();
         return "Башня продана: +" + fmt(refund) + " лома";
@@ -525,6 +593,7 @@ public class GameState {
         weaponAbilityCooldown = Math.max(0, weaponAbilityCooldown - dt);
         overdriveTimer = Math.max(0, overdriveTimer - dt);
         droneCooldown = Math.max(0, droneCooldown - dt);
+        mineCooldown = Math.max(0, mineCooldown - dt);
         manualHeat = Math.max(0, manualHeat - dt * (.28 + coolingModuleLevel * .08));
         if (manualOverheated && manualHeat <= .45) manualOverheated = false;
         if (manualReloadTimer > 0) {
@@ -585,20 +654,37 @@ public class GameState {
         // Башни у дороги: дальность, скорострельность и урон зависят от исследований и типа.
         syncTurrets();
         for (Turret t : turrets) {
+            if (t.type == 6) continue; // поддержка усиливает соседей пассивно
             t.cooldown -= dt;
             if (t.cooldown <= 0) {
-                Zombie target = nearestZombie(t.x, t.y, 4.0 + rangeBonus + (t.type == 2 ? .8 : t.type == 4 ? .5 : 0));
+                Zombie target = findTarget(t, towerRangeAt(t.slot));
                 if (target != null) {
                     double dx = target.x - t.x, dy = target.y - t.y;
                     double d = Math.max(.001, Math.hypot(dx, dy));
                     t.aimX = dx / d; t.aimY = dy / d;
-                    double typeDamage = t.type == 4 ? .72 : t.type == 3 ? 2.8 : t.type == 2 ? 2.0 : 1.0;
-                    double dmg = 10.0 * turretLevel * t.level * (1 + turretMult) * typeDamage;
-                    projectiles.add(new Projectile(t.x, t.y, target, dmg, t.type == 3 ? 10.0 : t.type == 4 ? 12.0 : 14.0, t.type));
-                    t.cooldown = (t.type == 3 ? 1.15 : t.type == 4 ? .82 : t.type == 2 ? .85 : .7) / (1 + fireRateMult);
-                } else {
-                    t.cooldown = 0.1;
-                }
+                    double typeDamage = t.type == 5 ? 2.4 : t.type == 4 ? .72 : t.type == 3 ? 2.8 : t.type == 2 ? 2.0 : 1.0;
+                    double branchDamage = t.branch == 1 ? 1.45 : 1.0;
+                    double supportBoost = 1 + nearbySupportCount(t.x, t.y) * .18;
+                    double dmg = 10.0 * turretLevel * t.level * (1 + turretMult) * typeDamage * branchDamage * supportBoost;
+                    double speed = t.type == 5 ? 8 : t.type == 3 ? 10 : t.type == 4 ? 12 : 14;
+                    Projectile projectile = new Projectile(t.x, t.y, target, dmg, speed, t.type);
+                    projectile.evolution = t.evolution;
+                    projectiles.add(projectile);
+                    double interval = t.type == 5 ? 1.55 : t.type == 3 ? 1.15 : t.type == 4 ? .82 : t.type == 2 ? .85 : .7;
+                    if (t.branch == 3) interval *= .65;
+                    if (t.type == 1 && t.evolution == 1) interval *= .58;
+                    t.cooldown = interval / (1 + fireRateMult);
+                } else t.cooldown = 0.1;
+            }
+        }
+
+        if (mineCharges > 0 && mineCooldown <= 0 && !zombies.isEmpty()) {
+            Zombie mineTarget = nearestZombie(0, 0, 6.5);
+            if (mineTarget != null) {
+                for (Zombie zombie : zombies)
+                    if (Math.hypot(zombie.x - mineTarget.x, zombie.y - mineTarget.y) < 1.6) zombie.hp -= 65;
+                hitEffects.add(new HitEffect(mineTarget.x, mineTarget.y, 5));
+                mineCharges--; mineCooldown = 3.0;
             }
         }
 
@@ -618,7 +704,7 @@ public class GameState {
             double d = Math.hypot(dx, dy);
             if (d < 0.35) {
                 double resistance = 1.0;
-                if (p.target.type == 2 && p.type == 1) resistance = .55; // броня держит пули
+                if (p.target.type == 2 && p.type == 1) resistance = p.evolution == 2 ? 1.20 : .55; // бронебойная эволюция
                 if (p.target.type == 1 && p.type == 2) resistance = 1.20; // лазер эффективен против бегунов
                 if (p.target.type == 3 && p.type == 3) resistance = .80; // токсичная плоть гасит разряд
                 if (p.target.type == 4 && p.type == 3) resistance = 1.15;
@@ -634,21 +720,32 @@ public class GameState {
                 }
                 if (p.type == 17) p.target.slowTimer = Math.max(p.target.slowTimer, 4.0);
                 if (p.type == 19) p.target.acidTimer = Math.max(p.target.acidTimer, 5.0);
-                if (p.type == 4) p.target.slowTimer = Math.max(p.target.slowTimer, 3.2);
-                if (p.type == 3) { // цепная молния переходит ещё на две близкие цели
+                if (p.type == 2 && p.evolution == 2) {
+                    p.target.burnTimer = Math.max(p.target.burnTimer, 3.0); p.target.burnDps = Math.max(p.target.burnDps, p.damage * .22);
+                }
+                if (p.type == 4) {
+                    p.target.slowTimer = Math.max(p.target.slowTimer, p.evolution == 1 ? 6.0 : 3.2);
+                    if (p.evolution == 2) p.target.acidTimer = Math.max(p.target.acidTimer, 3.0); // хрупкость
+                }
+                if (p.type == 3) { // цепная молния
                     int chains = 0;
+                    int maxChains = p.evolution == 1 ? 5 : 2;
                     for (Zombie other : zombies) {
-                        if (other == p.target || chains >= 2) continue;
+                        if (other == p.target || chains >= maxChains) continue;
                         if (Math.hypot(other.x - p.target.x, other.y - p.target.y) < 1.8) {
                             other.hp -= p.damage * .42;
                             hitEffects.add(new HitEffect(other.x, other.y, 3));
                             chains++;
                         }
                     }
+                    if (p.evolution == 2)
+                        for (Zombie other : zombies)
+                            if (other != p.target && Math.hypot(other.x - p.target.x, other.y - p.target.y) < 2.4)
+                                other.hp -= p.damage * .24;
                 }
-                if (p.type == 12 || p.type == 15) { // дробовик или гранатомёт
-                    double radius = p.type == 15 ? 2.15 : 1.25;
-                    double splash = p.type == 15 ? .72 : .42;
+                if (p.type == 5 || p.type == 12 || p.type == 15) { // ракета, дробовик или гранатомёт
+                    double radius = p.type == 5 ? 2.35 : p.type == 15 ? 2.15 : 1.25;
+                    double splash = p.type == 5 ? .78 : p.type == 15 ? .72 : .42;
                     for (Zombie other : zombies)
                         if (other != p.target && Math.hypot(other.x - p.target.x, other.y - p.target.y) < radius)
                             other.hp -= p.damage * splash;
@@ -738,6 +835,30 @@ public class GameState {
         return best;
     }
 
+    private Zombie findTarget(Turret turret, double range) {
+        Zombie best = null;
+        double bestScore = -Double.MAX_VALUE;
+        for (Zombie z : zombies) {
+            double distance = Math.hypot(z.x - turret.x, z.y - turret.y);
+            if (distance > range) continue;
+            double score;
+            if (turret.priority == 1) score = z.hp;
+            else if (turret.priority == 2) score = z.speed * 100 - distance;
+            else if (turret.priority == 3) score = (z.type == 2 ? 100000 : 0) - distance;
+            else if (turret.priority == 4) score = (z.type == 4 ? 100000 : 0) - distance;
+            else score = -distance;
+            if (score > bestScore) { bestScore = score; best = z; }
+        }
+        return best;
+    }
+
+    private int nearbySupportCount(double x, double y) {
+        int count = 0;
+        for (Turret turret : turrets)
+            if (turret.type == 6 && Math.hypot(turret.x - x, turret.y - y) <= 3.2) count++;
+        return count;
+    }
+
     private void syncTurrets() {
         List<Turret> synced = new ArrayList<>();
         for (int slot = 0; slot < placedTowerTypes.length; slot++) {
@@ -749,6 +870,9 @@ public class GameState {
             turret.slot = slot;
             turret.type = type;
             turret.level = towerLevelAt(slot);
+            turret.priority = towerPriorities[slot];
+            turret.branch = towerBranches[slot];
+            turret.evolution = towerEvolutions[slot];
             turret.x = TOWER_SLOTS[slot][0];
             turret.y = TOWER_SLOTS[slot][1];
             synced.add(turret);
@@ -785,6 +909,9 @@ public class GameState {
             else if (r.outItem.equals("turret_laser")) laserTurrets++;
             else if (r.outItem.equals("turret_tesla")) teslaTurrets++;
             else if (r.outItem.equals("turret_cryo")) cryoTurrets++;
+            else if (r.outItem.equals("turret_rocket")) rocketTurrets++;
+            else if (r.outItem.equals("turret_support")) supportTurrets++;
+            else if (r.outItem.equals("road_mines")) mineCharges += 3;
             else if (r.outItem.equals("turret_module")) turretLevel++;
             else if (r.outItem.equals("wall")) {
                 baseMaxHp += 20;
@@ -847,14 +974,19 @@ public class GameState {
             o.put("laserTurrets", laserTurrets);
             o.put("teslaTurrets", teslaTurrets);
             o.put("cryoTurrets", cryoTurrets);
+            o.put("rocketTurrets", rocketTurrets);
+            o.put("supportTurrets", supportTurrets);
+            o.put("mineCharges", mineCharges);
             o.put("fireRateMult", fireRateMult);
             o.put("rangeBonus", rangeBonus);
-            JSONArray slots = new JSONArray();
-            JSONArray levels = new JSONArray();
-            for (int type : placedTowerTypes) slots.put(type);
-            for (int level : towerLevels) levels.put(level);
-            o.put("placedTowerTypes", slots);
-            o.put("towerLevels", levels);
+            JSONArray slots = new JSONArray(), levels = new JSONArray(), priorities = new JSONArray();
+            JSONArray branches = new JSONArray(), evolutions = new JSONArray();
+            for (int i = 0; i < placedTowerTypes.length; i++) {
+                slots.put(placedTowerTypes[i]); levels.put(towerLevels[i]); priorities.put(towerPriorities[i]);
+                branches.put(towerBranches[i]); evolutions.put(towerEvolutions[i]);
+            }
+            o.put("placedTowerTypes", slots); o.put("towerLevels", levels);
+            o.put("towerPriorities", priorities); o.put("towerBranches", branches); o.put("towerEvolutions", evolutions);
             o.put("lastSeen", System.currentTimeMillis());
             JSONArray arr = new JSONArray();
             for (String s : doneResearch) arr.put(s);
@@ -911,6 +1043,9 @@ public class GameState {
             laserTurrets = o.optInt("laserTurrets", 0);
             teslaTurrets = o.optInt("teslaTurrets", 0);
             cryoTurrets = o.optInt("cryoTurrets", 0);
+            rocketTurrets = o.optInt("rocketTurrets", 0);
+            supportTurrets = o.optInt("supportTurrets", 0);
+            mineCharges = o.optInt("mineCharges", 0);
             fireRateMult = o.optDouble("fireRateMult", 0);
             rangeBonus = o.optDouble("rangeBonus", 0);
             JSONArray slots = o.optJSONArray("placedTowerTypes");
@@ -924,8 +1059,15 @@ public class GameState {
                 for (int i = 0; i < laserTurrets && index < placedTowerTypes.length; i++) placedTowerTypes[index++] = 2;
             }
             JSONArray levels = o.optJSONArray("towerLevels");
-            if (levels != null)
-                for (int i = 0; i < towerLevels.length && i < levels.length(); i++) towerLevels[i] = levels.optInt(i, 1);
+            JSONArray priorities = o.optJSONArray("towerPriorities");
+            JSONArray branches = o.optJSONArray("towerBranches");
+            JSONArray evolutions = o.optJSONArray("towerEvolutions");
+            for (int i = 0; i < towerLevels.length; i++) {
+                if (levels != null) towerLevels[i] = levels.optInt(i, 1);
+                if (priorities != null) towerPriorities[i] = priorities.optInt(i, 0);
+                if (branches != null) towerBranches[i] = branches.optInt(i, 0);
+                if (evolutions != null) towerEvolutions[i] = evolutions.optInt(i, 0);
+            }
             long ls = o.getLong("lastSeen");
             JSONArray arr = o.optJSONArray("doneResearch");
             doneResearch.clear();
@@ -955,9 +1097,11 @@ public class GameState {
         baseHp = 100; baseMaxHp = 100;
         wave = 0; waveActive = false; zombiesToSpawn = 0; spawnTimer = 0; nextWaveTimer = 2.0;
         zombies.clear(); projectiles.clear(); hitEffects.clear(); turrets.clear();
-        basicTurrets = 0; laserTurrets = 0; teslaTurrets = 0; cryoTurrets = 0;
-        fireRateMult = 0; rangeBonus = 0;
-        for (int i = 0; i < placedTowerTypes.length; i++) { placedTowerTypes[i] = 0; towerLevels[i] = 0; }
+        basicTurrets = 0; laserTurrets = 0; teslaTurrets = 0; cryoTurrets = 0; rocketTurrets = 0; supportTurrets = 0;
+        mineCharges = 0; mineCooldown = 0; fireRateMult = 0; rangeBonus = 0;
+        for (int i = 0; i < placedTowerTypes.length; i++) {
+            placedTowerTypes[i] = towerLevels[i] = towerPriorities[i] = towerBranches[i] = towerEvolutions[i] = 0;
+        }
         placedTowerTypes[0] = 1; towerLevels[0] = 1; movingTowerSlot = -1;
         doneResearch.clear(); activeResearchId = null; activeCraftId = null;
         activeResearchLeft = 0; activeCraftLeft = 0;
@@ -1012,7 +1156,7 @@ public class GameState {
 
     public static class Projectile {
         double x, y, damage, speed;
-        int type, ammoType;
+        int type, ammoType, evolution;
         boolean critical, headshot;
         Zombie target;
         Projectile(double x, double y, Zombie t, double dmg, double spd, int type) {
@@ -1022,6 +1166,6 @@ public class GameState {
 
     public static class Turret {
         double x, y, cooldown, aimX = 1, aimY = 0;
-        int slot, type = 1, level = 1;
+        int slot, type = 1, level = 1, priority, branch, evolution;
     }
 }
