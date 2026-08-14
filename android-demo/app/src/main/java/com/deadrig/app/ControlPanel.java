@@ -349,11 +349,17 @@ public final class ControlPanel {
     public static void showWorkshop(Activity activity, GameState state, OnChanged changed) {
         Dialog dialog = create(activity, "ПРОИЗВОДСТВЕННЫЙ ЦЕХ", "Выберите конкретный рецепт");
         LinearLayout list = content(dialog);
-        if (state.activeCraftId != null) {
-            Defs.RecipeDef active = Defs.findRecipe(state.activeCraftId);
-            addCard(activity, list, "ПРОИЗВОДСТВО  //  " + active.name,
-                    "Осталось примерно " + (int) Math.ceil(state.activeCraftSeconds()) + " сек.", null, false, null);
-        }
+        addMetric(activity, list, "ЛИНИИ", state.activeCraftCount() + "/" + state.workshopSlots());
+        addMetric(activity, list, "ЧЕРТЕЖИ БОССОВ", String.valueOf(state.blueprints()));
+        addMetric(activity, list, "ЛЕГЕНДАРНЫЙ КОМПЛЕКТ", state.legendarySetActive() ? "АКТИВЕН  +25% УРОНА" : "НЕ СОБРАН");
+        for (int slot = 0; slot < state.workshopSlots(); slot++)
+            if (!"—".equals(state.activeCraftName(slot)))
+                addCard(activity, list, "ЛИНИЯ " + (slot + 1) + "  //  " + state.activeCraftName(slot),
+                        "Осталось примерно " + state.activeCraftSeconds(slot) + " сек.", null, false, null);
+        addCard(activity, list, "Расширить производство", "До трёх параллельных очередей.", "ОТКРЫТЬ ЛИНИЮ", true,
+                v -> result(activity, state.upgradeWorkshop(), changed, dialog));
+        addCard(activity, list, "Инвентарь", "Качество, редкость, модификаторы, разбор и расходники.", "ОТКРЫТЬ", true,
+                v -> { dialog.dismiss(); showInventory(activity, state, changed); });
         for (Defs.RecipeDef recipe : Defs.RECIPES) {
             boolean unlocked = state.isUnlocked(recipe);
             String requirement = "";
@@ -365,8 +371,33 @@ public final class ControlPanel {
                     + " хешей + " + GameState.fmt(recipe.costScrap) + " лома  •  " + (int) recipe.durationSec + " сек." + requirement;
             addCard(activity, list, recipe.name, description, unlocked ? "СОЗДАТЬ" : "ЗАКРЫТО", unlocked,
                     v -> result(activity, state.tryStartCraft(recipe.id), changed, dialog));
+            boolean batchable = recipe.outItem.startsWith("consumable_") || recipe.outItem.equals("wall")
+                    || recipe.outItem.equals("road_mines") || recipe.outItem.equals("turret_module");
+            if (batchable) addCard(activity, list, recipe.name + " ×5", "Массовое производство одной очередью.",
+                    unlocked ? "СОЗДАТЬ ×5" : "ЗАКРЫТО", unlocked,
+                    v -> result(activity, state.tryStartCraft(recipe.id, 5), changed, dialog));
         }
         addHint(activity, list, "Готовая башня попадёт в резерв. Нажмите на свободную площадку у дороги, чтобы установить её.");
+        dialog.show(); fit(dialog);
+    }
+
+    public static void showInventory(Activity activity, GameState state, OnChanged changed) {
+        Dialog dialog = create(activity, "ИНВЕНТАРЬ", "Предметы, расходники и легендарные комплекты");
+        LinearLayout list = content(dialog);
+        addMetric(activity, list, "ПРЕДМЕТОВ", String.valueOf(state.inventory.size()));
+        addMetric(activity, list, "ЛЕГЕНДАРНЫЙ БОНУС", state.legendarySetActive() ? "+25% УРОНА" : "Нужно 3 легендарных предмета");
+        if (state.inventory.isEmpty()) addHint(activity, list, "Инвентарь пуст. Создавайте предметы в цехе.");
+        for (GameState.InventoryItem item : new java.util.ArrayList<>(state.inventory)) {
+            String info = item.qualityName() + "  •  " + item.rarityName() + "  •  " + item.modifierName() + "  •  ×" + item.quantity;
+            addCard(activity, list, item.name, info, item.itemId.startsWith("consumable_") ? "ИСПОЛЬЗОВАТЬ" : null,
+                    item.itemId.startsWith("consumable_"), v -> result(activity, state.useInventoryItem(item.uid), changed, dialog));
+            if (!item.itemId.startsWith("consumable_")) {
+                addCard(activity, list, "Улучшить редкость: " + item.name, "Требуются три одинаковых экземпляра.", "ОБЪЕДИНИТЬ", item.rarity < 3,
+                        v -> result(activity, state.upgradeItemRarity(item.uid), changed, dialog));
+                addCard(activity, list, "Разобрать: " + item.name, "Возвращает металл и электронику.", "РАЗОБРАТЬ", true,
+                        v -> result(activity, state.dismantleItem(item.uid), changed, dialog));
+            }
+        }
         dialog.show(); fit(dialog);
     }
 
@@ -403,6 +434,10 @@ public final class ControlPanel {
         if ("turret_support".equals(item)) return "+18% урона соседним башням";
         if ("road_mines".equals(item)) return "Три автоматические мины на маршрутах";
         if ("wall".equals(item)) return "+20 к максимальному HP базы и ремонт";
+        if ("consumable_repair".equals(item)) return "Ремонтирует ядро и майнинговое оборудование";
+        if ("consumable_emp".equals(item)) return "Наносит урон всем врагам";
+        if ("consumable_freeze".equals(item)) return "Замораживает всех врагов на 6 секунд";
+        if ("consumable_emergency".equals(item)) return "Полностью восстанавливает базу и энергию";
         if ("weapon_auto".equals(item)) return "Высокий темп ручного огня при удержании";
         if ("weapon_shotgun".equals(item)) return "Дробь наносит урон группе зомби";
         if ("weapon_rail".equals(item)) return "Мощный бронебойный выстрел";

@@ -92,6 +92,14 @@ public class Defs {
 
         c = new RecipeDef(); c.id = "wall"; c.name = "Стена"; c.outItem = "wall";
         c.costHashes = 20; c.costScrap = 15; c.durationSec = 15; RECIPES.add(c);
+        c = new RecipeDef(); c.id = "consumable_repair"; c.name = "Ремонтный комплект"; c.outItem = "consumable_repair";
+        c.costHashes = 35; c.costScrap = 18; c.durationSec = 18; RECIPES.add(c);
+        c = new RecipeDef(); c.id = "consumable_emp"; c.name = "ЭМИ-заряд"; c.outItem = "consumable_emp";
+        c.costHashes = 55; c.costScrap = 25; c.durationSec = 24; RECIPES.add(c);
+        c = new RecipeDef(); c.id = "consumable_freeze"; c.name = "Крио-граната"; c.outItem = "consumable_freeze";
+        c.costHashes = 48; c.costScrap = 24; c.durationSec = 22; RECIPES.add(c);
+        c = new RecipeDef(); c.id = "consumable_emergency"; c.name = "Аварийный протокол"; c.outItem = "consumable_emergency";
+        c.costHashes = 90; c.costScrap = 42; c.durationSec = 35; RECIPES.add(c);
 
         c = new RecipeDef(); c.id = "turret_tesla"; c.name = "Тесла-башня"; c.outItem = "turret_tesla";
         c.requiresResearchId = "r_tesla"; c.costHashes = 300; c.costScrap = 130; c.durationSec = 150; RECIPES.add(c);

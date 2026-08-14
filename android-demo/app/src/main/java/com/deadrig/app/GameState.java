@@ -162,6 +162,14 @@ public class GameState {
     private int prestigeScienceLevel = 0;
     public String activeCraftId = null;
     private double activeCraftLeft = 0;
+    private int activeCraftQuantity = 1;
+    private final String[] extraCraftIds = new String[2];
+    private final double[] extraCraftTimers = new double[2];
+    private final int[] extraCraftQuantities = new int[]{1, 1};
+    private int workshopSlots = 1;
+    private int blueprints = 0;
+    private int nextItemUid = 1;
+    public final List<InventoryItem> inventory = new ArrayList<>();
 
     public double activeResearchSeconds() { return Math.max(0, activeResearchLeft); }
     public int labSlots() { return labSlots; }
@@ -188,6 +196,25 @@ public class GameState {
         String[] names = {"Нет", "Оружейник", "Экономист", "Биолог", "Инженер"}; return names[scientistType];
     }
     public double activeCraftSeconds() { return Math.max(0, activeCraftLeft); }
+    public int workshopSlots() { return workshopSlots; }
+    public int blueprints() { return blueprints; }
+    public int activeCraftCount() {
+        int count = activeCraftId != null ? 1 : 0; for (String id : extraCraftIds) if (id != null) count++; return count;
+    }
+    public String activeCraftName(int slot) {
+        String id = slot == 0 ? activeCraftId : slot <= 2 ? extraCraftIds[slot - 1] : null;
+        Defs.RecipeDef recipe = id == null ? null : Defs.findRecipe(id); return recipe == null ? "—" : recipe.name;
+    }
+    public int activeCraftSeconds(int slot) {
+        return (int) Math.ceil(Math.max(0, slot == 0 ? activeCraftLeft : slot <= 2 ? extraCraftTimers[slot - 1] : 0));
+    }
+    public boolean legendarySetActive() {
+        int count = 0; for (InventoryItem item : inventory) if (item.rarity >= 3) count += item.quantity;
+        return count >= 3;
+    }
+    private int inventoryModifierCount(int modifier) {
+        int count = 0; for (InventoryItem item : inventory) if (item.modifier == modifier) count += item.quantity; return Math.min(20, count);
+    }
     public double turretDamageBonus() { return turretMult; }
     public double turretFireRateBonus() { return fireRateMult; }
     public double turretRangeBonus() { return rangeBonus; }
@@ -233,8 +260,8 @@ public class GameState {
         double durabilityFactor = .30 + .70 * Math.max(0, minerDurability) / 100.0;
         double specialization = baseSpecialization == 1 ? 1.25 : 1.0;
         return 1.0 * minerLevel * (1 + miningMult) * (1 + prestigeLevel * .5)
-                * (1 + capturedNodes * .15 + networkNodes * .10 + repeatableScience[0] * .03 + prestigeScienceLevel * .04)
-                * energyFactor * durabilityFactor * specialization;
+                * (1 + capturedNodes * .15 + networkNodes * .10 + repeatableScience[0] * .03 + prestigeScienceLevel * .04
+                + inventoryModifierCount(2) * .01) * energyFactor * durabilityFactor * specialization;
     }
     public double energy() { return energy; }
     public double maxEnergy() { return maxEnergy; }
@@ -512,7 +539,8 @@ public class GameState {
         int type = WeaponCatalog.clamp(manualWeaponType);
         return WeaponCatalog.DAMAGE[type] * WeaponCatalog.RARITY_MULT[weaponRarity[type]] * weaponDamageRoll[type]
                 * (1 + (manualWeaponLevel - 1) * .35) * (1 + damageModuleLevel * .12)
-                * (scienceDoctrine == 1 ? 1.15 : 1.0);
+                * (scienceDoctrine == 1 ? 1.15 : 1.0) * (legendarySetActive() ? 1.25 : 1.0)
+                * (1 + inventoryModifierCount(0) * .02);
     }
     public double manualUpgradeCost() { return 20.0 * Math.pow(1.7, manualWeaponLevel - 1); }
     public int turretCount() { return placedTowerCount(); }
@@ -819,8 +847,68 @@ public class GameState {
         return "Начато: " + def.name;
     }
 
+    public String upgradeWorkshop() {
+        if (workshopSlots >= 3) return "Все производственные линии открыты";
+        double cost = 40 + workshopSlots * 35;
+        if (electronics < cost || metal < cost) return "Нужно по " + fmt(cost) + " металла и электроники";
+        electronics -= cost; metal -= cost; workshopSlots++;
+        return "Открыта производственная линия " + workshopSlots;
+    }
+
+    private String inventoryName(String itemId) {
+        Defs.RecipeDef recipe = Defs.findRecipe(itemId);
+        if (recipe != null) return recipe.name;
+        for (Defs.RecipeDef r : Defs.RECIPES) if (r.outItem.equals(itemId)) return r.name;
+        return itemId;
+    }
+
+    private void addInventoryItem(String itemId, int quantity) {
+        int quality = Math.random() < .12 ? 2 : Math.random() < .42 ? 1 : 0;
+        int rarity = Math.random() < (blueprints > 0 ? .06 : .015) ? 3 : Math.random() < .12 ? 2 : Math.random() < .38 ? 1 : 0;
+        int modifier = (int) (Math.random() * 4);
+        if (rarity == 3 && blueprints > 0) blueprints--;
+        for (InventoryItem item : inventory) {
+            if (item.itemId.equals(itemId) && item.quality == quality && item.rarity == rarity && item.modifier == modifier) {
+                item.quantity += quantity; return;
+            }
+        }
+        inventory.add(new InventoryItem(nextItemUid++, itemId, inventoryName(itemId), quantity, quality, rarity, modifier));
+    }
+
+    public String dismantleItem(int uid) {
+        InventoryItem item = findInventoryItem(uid);
+        if (item == null || item.quantity <= 0) return "Предмет не найден";
+        item.quantity--; metal += 8 * (item.rarity + 1); electronics += 4 * (item.quality + 1);
+        if (item.quantity <= 0) inventory.remove(item);
+        return "Предмет разобран на материалы";
+    }
+
+    public String upgradeItemRarity(int uid) {
+        InventoryItem item = findInventoryItem(uid);
+        if (item == null) return "Предмет не найден";
+        if (item.rarity >= 3) return "Предмет уже легендарный";
+        if (item.quantity < 3) return "Нужно три одинаковых предмета";
+        item.quantity -= 2; item.rarity++;
+        return "Редкость повышена";
+    }
+
+    public String useInventoryItem(int uid) {
+        InventoryItem item = findInventoryItem(uid);
+        if (item == null || !item.itemId.startsWith("consumable_")) return "Это не расходник";
+        if (item.itemId.equals("consumable_repair")) { baseHp = Math.min(baseMaxHp, baseHp + 35); minerDurability = Math.min(100, minerDurability + 25); }
+        else if (item.itemId.equals("consumable_emp")) for (Zombie zombie : zombies) zombie.hp -= 45;
+        else if (item.itemId.equals("consumable_freeze")) for (Zombie zombie : zombies) zombie.slowTimer = Math.max(zombie.slowTimer, 6);
+        else if (item.itemId.equals("consumable_emergency")) { baseHp = baseMaxHp; energy = maxEnergy; }
+        item.quantity--; if (item.quantity <= 0) inventory.remove(item);
+        return "Расходник применён";
+    }
+
+    private InventoryItem findInventoryItem(int uid) {
+        for (InventoryItem item : inventory) if (item.uid == uid) return item; return null;
+    }
+
     public String tryStartCraft() {
-        if (activeCraftId != null) return "Производство уже идёт";
+        if (activeCraftCount() >= workshopSlots) return "Все производственные линии заняты";
         boolean anyUnlocked = false;
         // Пока есть свободные площадки, цех приоритетно строит лучшую открытую башню.
         if (pendingTowerCount() == 0 && placedTowerCount() < TOWER_SLOTS.length) {
@@ -851,8 +939,11 @@ public class GameState {
     }
 
     /** Запускает выбранный игроком рецепт из экрана цеха. */
-    public String tryStartCraft(String id) {
-        if (activeCraftId != null) return "Производство уже идёт";
+    public String tryStartCraft(String id) { return tryStartCraft(id, 1); }
+
+    public String tryStartCraft(String id, int quantity) {
+        if (activeCraftCount() >= workshopSlots) return "Все производственные линии заняты";
+        quantity = Math.max(1, Math.min(5, quantity));
         Defs.RecipeDef recipe = Defs.findRecipe(id);
         if (recipe == null) return "Рецепт не найден";
         if (!isUnlocked(recipe)) {
@@ -861,16 +952,27 @@ public class GameState {
         }
         boolean tower = recipe.outItem.startsWith("turret_") && !recipe.outItem.equals("turret_module");
         int weaponTier = weaponTypeForItem(recipe.outItem);
-        if (weaponTier > 0 && ownsWeapon(weaponTier)) return "Это оружие уже создано";
+        if (weaponTier > 0) {
+            if (ownsWeapon(weaponTier)) return "Это оружие уже создано";
+            quantity = 1;
+        }
+        if (tower) quantity = 1;
         if ("combat_drone".equals(recipe.outItem) && combatDroneUnlocked) return "Боевой дрон уже создан";
         if ("special_ammo".equals(recipe.outItem) && specialAmmoUnlocked) return "Специальные боеприпасы уже открыты";
         if (tower && pendingTowerCount() > 0) return "Сначала установите башню из резерва";
         if (tower && placedTowerCount() >= TOWER_SLOTS.length) return "Все площадки заняты";
-        if (hashes < recipe.costHashes || scrap < recipe.costScrap)
-            return "Нужно " + fmt(recipe.costHashes) + " хешей и " + fmt(recipe.costScrap) + " лома";
-        hashes -= recipe.costHashes; scrap -= recipe.costScrap;
-        activeCraftId = recipe.id; activeCraftLeft = recipe.durationSec * (baseSpecialization == 4 ? .72 : 1.0);
-        return "Производство: " + recipe.name;
+        double hashCost = recipe.costHashes * quantity, scrapCost = recipe.costScrap * quantity;
+        if (hashes < hashCost || scrap < scrapCost)
+            return "Нужно " + fmt(hashCost) + " хешей и " + fmt(scrapCost) + " лома";
+        hashes -= hashCost; scrap -= scrapCost;
+        double duration = recipe.durationSec * quantity * (baseSpecialization == 4 ? .72 : 1.0);
+        if (activeCraftId == null) { activeCraftId = recipe.id; activeCraftLeft = duration; activeCraftQuantity = quantity; }
+        else {
+            for (int i = 0; i < extraCraftIds.length; i++) if (extraCraftIds[i] == null) {
+                extraCraftIds[i] = recipe.id; extraCraftTimers[i] = duration; extraCraftQuantities[i] = quantity; break;
+            }
+        }
+        return "Производство: " + recipe.name + (quantity > 1 ? " ×" + quantity : "");
     }
 
     private int weaponTypeForItem(String item) {
@@ -918,7 +1020,7 @@ public class GameState {
         mineCooldown = Math.max(0, mineCooldown - dt);
         for (int i = 0; i < platformDisabledTimer.length; i++)
             platformDisabledTimer[i] = Math.max(0, platformDisabledTimer[i] - dt);
-        manualHeat = Math.max(0, manualHeat - dt * (.28 + coolingModuleLevel * .08));
+        manualHeat = Math.max(0, manualHeat - dt * (.28 + coolingModuleLevel * .08 + inventoryModifierCount(1) * .02));
         if (manualOverheated && manualHeat <= .45) manualOverheated = false;
         if (manualReloadTimer > 0) {
             manualReloadTimer -= dt;
@@ -994,7 +1096,8 @@ public class GameState {
                         platformDisabledTimer[slot] = Math.max(platformDisabledTimer[slot], 3.5);
             }
             if (z.pathIndex >= PATHS[z.pathId].length) {
-                double defenseMult = (scienceDoctrine == 2 ? .72 : 1.0) * Math.max(.55, 1 - repeatableScience[2] * .025);
+                double defenseMult = (scienceDoctrine == 2 ? .72 : 1.0) * Math.max(.55, 1 - repeatableScience[2] * .025)
+                        * Math.max(.70, 1 - inventoryModifierCount(3) * .015);
                 baseHp -= z.damage * (challengeMode == 3 ? 2.0 : 1.0) * defenseMult;
                 if (z.type == 10) {
                     baseHp -= 18;
@@ -1082,7 +1185,8 @@ public class GameState {
                     double branchDamage = t.branch == 1 ? 1.45 : 1.0;
                     double supportBoost = 1 + nearbySupportCount(t.x, t.y) * .18;
                     double specializationBoost = (baseSpecialization == 2 ? 1.20 : 1.0)
-                            * (1 + repeatableScience[1] * .03) * (scienceDoctrine == 1 ? 1.15 : 1.0);
+                            * (1 + repeatableScience[1] * .03) * (scienceDoctrine == 1 ? 1.15 : 1.0)
+                            * (legendarySetActive() ? 1.25 : 1.0);
                     double dmg = 10.0 * turretLevel * t.level * (1 + turretMult) * typeDamage * branchDamage * supportBoost * specializationBoost;
                     double speed = t.type == 5 ? 8 : t.type == 3 ? 10 : t.type == 4 ? 12 : 14;
                     Projectile projectile = new Projectile(t.x, t.y, target, dmg, speed, t.type);
@@ -1199,7 +1303,7 @@ public class GameState {
                 }
                 enemySeen[dead.type] = true; enemyKills[dead.type]++;
                 sciencePoints += dead.type == 4 ? 18 : dead.type >= 5 ? 2.5 : 1;
-                if (dead.type == 4) bossSamples++;
+                if (dead.type == 4) { bossSamples++; blueprints++; }
                 zombies.remove(i); dailyKills++;
             }
         }
@@ -1235,10 +1339,22 @@ public class GameState {
             }
         }
 
-        // крафт
+        // Параллельные производственные линии.
         if (activeCraftId != null) {
             activeCraftLeft -= dt;
-            if (activeCraftLeft <= 0) completeCraft();
+            if (activeCraftLeft <= 0) {
+                String completed = activeCraftId; int quantity = activeCraftQuantity;
+                activeCraftId = null; activeCraftLeft = 0; activeCraftQuantity = 1; completeCraft(completed, quantity);
+            }
+        }
+        for (int i = 0; i < extraCraftIds.length; i++) {
+            if (extraCraftIds[i] == null) continue;
+            extraCraftTimers[i] -= dt;
+            if (extraCraftTimers[i] <= 0) {
+                String completed = extraCraftIds[i]; int quantity = extraCraftQuantities[i];
+                extraCraftIds[i] = null; extraCraftTimers[i] = 0; extraCraftQuantities[i] = 1;
+                completeCraft(completed, quantity);
+            }
         }
     }
 
@@ -1379,9 +1495,11 @@ public class GameState {
         }
     }
 
-    private void completeCraft() {
-        Defs.RecipeDef r = Defs.findRecipe(activeCraftId);
+    private void completeCraft(String recipeId, int quantity) {
+        Defs.RecipeDef r = Defs.findRecipe(recipeId);
         if (r != null) {
+            quantity = Math.max(1, quantity);
+            addInventoryItem(r.outItem, quantity);
             int craftedWeapon = weaponTypeForItem(r.outItem);
             if (craftedWeapon > 0) {
                 ownedWeaponMask |= 1 << craftedWeapon;
@@ -1390,20 +1508,19 @@ public class GameState {
                 manualAmmo = manualMagazineSize();
             } else if (r.outItem.equals("combat_drone")) combatDroneUnlocked = true;
             else if (r.outItem.equals("special_ammo")) specialAmmoUnlocked = true;
-            else if (r.outItem.equals("turret_basic")) basicTurrets++;
-            else if (r.outItem.equals("turret_laser")) laserTurrets++;
-            else if (r.outItem.equals("turret_tesla")) teslaTurrets++;
-            else if (r.outItem.equals("turret_cryo")) cryoTurrets++;
-            else if (r.outItem.equals("turret_rocket")) rocketTurrets++;
-            else if (r.outItem.equals("turret_support")) supportTurrets++;
-            else if (r.outItem.equals("road_mines")) mineCharges += 3;
-            else if (r.outItem.equals("turret_module")) turretLevel++;
+            else if (r.outItem.equals("turret_basic")) basicTurrets += quantity;
+            else if (r.outItem.equals("turret_laser")) laserTurrets += quantity;
+            else if (r.outItem.equals("turret_tesla")) teslaTurrets += quantity;
+            else if (r.outItem.equals("turret_cryo")) cryoTurrets += quantity;
+            else if (r.outItem.equals("turret_rocket")) rocketTurrets += quantity;
+            else if (r.outItem.equals("turret_support")) supportTurrets += quantity;
+            else if (r.outItem.equals("road_mines")) mineCharges += 3 * quantity;
+            else if (r.outItem.equals("turret_module")) turretLevel += quantity;
             else if (r.outItem.equals("wall")) {
-                baseMaxHp += 20;
-                baseHp = Math.min(baseMaxHp, baseHp + 20);
+                baseMaxHp += 20 * quantity;
+                baseHp = Math.min(baseMaxHp, baseHp + 20 * quantity);
             }
         }
-        activeCraftId = null;
     }
 
     private void checkDailyReset() {
@@ -1481,7 +1598,20 @@ public class GameState {
             o.put("fireRateMult", fireRateMult);
             o.put("rangeBonus", rangeBonus);
             o.put("activeResearchId", activeResearchId); o.put("activeResearchLeft", activeResearchLeft);
-            o.put("activeCraftId", activeCraftId); o.put("activeCraftLeft", activeCraftLeft);
+            o.put("activeCraftId", activeCraftId); o.put("activeCraftLeft", activeCraftLeft); o.put("activeCraftQuantity", activeCraftQuantity);
+            o.put("workshopSlots", workshopSlots); o.put("blueprints", blueprints); o.put("nextItemUid", nextItemUid);
+            JSONArray craftIds = new JSONArray(), craftTimers = new JSONArray(), craftQuantities = new JSONArray();
+            for (int i = 0; i < extraCraftIds.length; i++) {
+                craftIds.put(extraCraftIds[i]); craftTimers.put(extraCraftTimers[i]); craftQuantities.put(extraCraftQuantities[i]);
+            }
+            o.put("extraCraftIds", craftIds); o.put("extraCraftTimers", craftTimers); o.put("extraCraftQuantities", craftQuantities);
+            JSONArray inventoryJson = new JSONArray();
+            for (InventoryItem item : inventory) {
+                JSONObject entry = new JSONObject(); entry.put("uid", item.uid); entry.put("itemId", item.itemId); entry.put("name", item.name);
+                entry.put("quantity", item.quantity); entry.put("quality", item.quality); entry.put("rarity", item.rarity); entry.put("modifier", item.modifier);
+                inventoryJson.put(entry);
+            }
+            o.put("inventory", inventoryJson);
             o.put("labSlots", labSlots); o.put("scientistType", scientistType); o.put("sciencePoints", sciencePoints);
             o.put("bossSamples", bossSamples); o.put("experimentTimer", experimentTimer); o.put("experimentType", experimentType);
             o.put("scienceDoctrine", scienceDoctrine); o.put("prestigeScienceLevel", prestigeScienceLevel);
@@ -1583,7 +1713,23 @@ public class GameState {
             activeResearchId = o.isNull("activeResearchId") ? null : o.optString("activeResearchId", null);
             activeResearchLeft = o.optDouble("activeResearchLeft", 0);
             activeCraftId = o.isNull("activeCraftId") ? null : o.optString("activeCraftId", null);
-            activeCraftLeft = o.optDouble("activeCraftLeft", 0);
+            activeCraftLeft = o.optDouble("activeCraftLeft", 0); activeCraftQuantity = o.optInt("activeCraftQuantity", 1);
+            workshopSlots = Math.max(1, Math.min(3, o.optInt("workshopSlots", 1))); blueprints = o.optInt("blueprints", 0);
+            nextItemUid = o.optInt("nextItemUid", 1);
+            JSONArray craftIds = o.optJSONArray("extraCraftIds"), craftTimers = o.optJSONArray("extraCraftTimers");
+            JSONArray craftQuantities = o.optJSONArray("extraCraftQuantities");
+            for (int i = 0; i < extraCraftIds.length; i++) {
+                if (craftIds != null && !craftIds.isNull(i)) extraCraftIds[i] = craftIds.optString(i, null);
+                if (craftTimers != null) extraCraftTimers[i] = craftTimers.optDouble(i, 0);
+                if (craftQuantities != null) extraCraftQuantities[i] = craftQuantities.optInt(i, 1);
+            }
+            inventory.clear(); JSONArray inventoryJson = o.optJSONArray("inventory");
+            if (inventoryJson != null) for (int i = 0; i < inventoryJson.length(); i++) {
+                JSONObject entry = inventoryJson.optJSONObject(i); if (entry == null) continue;
+                inventory.add(new InventoryItem(entry.optInt("uid", nextItemUid++), entry.optString("itemId", "unknown"),
+                        entry.optString("name", "Предмет"), entry.optInt("quantity", 1), entry.optInt("quality", 0),
+                        entry.optInt("rarity", 0), entry.optInt("modifier", 0)));
+            }
             labSlots = Math.max(1, Math.min(3, o.optInt("labSlots", 1)));
             scientistType = o.optInt("scientistType", 0); sciencePoints = o.optDouble("sciencePoints", 0);
             bossSamples = o.optInt("bossSamples", 0); experimentTimer = o.optDouble("experimentTimer", 0);
@@ -1660,7 +1806,9 @@ public class GameState {
         }
         placedTowerTypes[0] = 1; towerLevels[0] = 1; movingTowerSlot = -1;
         doneResearch.clear(); activeResearchId = null; activeCraftId = null;
-        activeResearchLeft = 0; activeCraftLeft = 0; labSlots = 1; scientistType = 0; sciencePoints = 0; bossSamples = 0;
+        activeResearchLeft = 0; activeCraftLeft = 0; activeCraftQuantity = 1; workshopSlots = 1; blueprints = 0; nextItemUid = 1;
+        inventory.clear(); for (int i = 0; i < extraCraftIds.length; i++) { extraCraftIds[i] = null; extraCraftTimers[i] = 0; extraCraftQuantities[i] = 1; }
+        labSlots = 1; scientistType = 0; sciencePoints = 0; bossSamples = 0;
         experimentTimer = 0; experimentType = -1; scienceDoctrine = 0; prestigeScienceLevel = 0;
         for (int i = 0; i < extraResearchIds.length; i++) { extraResearchIds[i] = null; extraResearchTimers[i] = 0; }
         for (int i = 0; i < repeatableScience.length; i++) repeatableScience[i] = 0;
@@ -1698,6 +1846,20 @@ public class GameState {
     }
 
     // ===== сущности =====
+    public static class InventoryItem {
+        public int uid, quantity, quality, rarity, modifier;
+        public String itemId, name;
+        InventoryItem(int uid, String itemId, String name, int quantity, int quality, int rarity, int modifier) {
+            this.uid = uid; this.itemId = itemId; this.name = name; this.quantity = quantity;
+            this.quality = quality; this.rarity = rarity; this.modifier = modifier;
+        }
+        public String qualityName() { return quality == 2 ? "Идеальное" : quality == 1 ? "Качественное" : "Стандартное"; }
+        public String rarityName() { return WeaponCatalog.RARITY[Math.max(0, Math.min(3, rarity))]; }
+        public String modifierName() {
+            String[] names = {"Калиброванный", "Эффективный", "Ресурсный", "Защитный"}; return names[Math.max(0, Math.min(3, modifier))];
+        }
+    }
+
     public static class Zombie {
         double x, y, hp, maxHp, speed, damage, slowTimer, burnTimer, burnDps, acidTimer, abilityCooldown;
         int pathId, pathIndex = 1, type, eliteModifier, summons, bossPhase;
