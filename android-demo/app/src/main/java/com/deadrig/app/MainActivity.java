@@ -39,7 +39,8 @@ public class MainActivity extends Activity {
 
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.rgb(5, 14, 17));
-        root.addView(new GameView(this, gs), new FrameLayout.LayoutParams(
+        root.addView(new GameView(this, gs, slot ->
+                ControlPanel.showTower(this, gs, slot, this::refreshHud)), new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         root.addView(buildTopPanel(), new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP));

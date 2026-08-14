@@ -65,6 +65,26 @@ public final class ControlPanel {
         dialog.show(); fit(dialog);
     }
 
+    public static void showTower(Activity activity, GameState state, int slot, OnChanged changed) {
+        int type = state.towerTypeAt(slot);
+        if (type == 0) return;
+        String[] names = {"", "ПУЛЕМЁТНАЯ БАШНЯ", "ЛАЗЕРНАЯ БАШНЯ", "ТЕСЛА-БАШНЯ"};
+        Dialog dialog = create(activity, names[type], "Монтажная площадка " + (slot + 1));
+        LinearLayout list = content(dialog);
+        addMetric(activity, list, "ЛОКАЛЬНЫЙ УРОВЕНЬ", String.valueOf(state.towerLevelAt(slot)));
+        addMetric(activity, list, "ГЛОБАЛЬНЫЙ УРОВЕНЬ", String.valueOf(state.turretLevel));
+        addCard(activity, list, "Локальное усиление",
+                "Увеличивает урон только этой башни.\nСтоимость: " + GameState.fmt(state.towerUpgradeCost(slot)) + " хешей",
+                "УЛУЧШИТЬ", true, v -> result(activity, state.tryUpgradeTower(slot), changed, dialog));
+        addCard(activity, list, "Переместить",
+                "Башня сохранит тип и локальный уровень. После подтверждения нажмите на свободную площадку.",
+                "ВЫБРАТЬ НОВОЕ МЕСТО", true, v -> result(activity, state.beginMoveTower(slot), changed, dialog));
+        addCard(activity, list, "Демонтаж",
+                "Возвращает часть лома. Последнюю и стартовую башню демонтировать нельзя.",
+                "ПРОДАТЬ", true, v -> result(activity, state.trySellTower(slot), changed, dialog));
+        dialog.show(); fit(dialog);
+    }
+
     public static void showResearch(Activity activity, GameState state, OnChanged changed) {
         Dialog dialog = create(activity, "НАУЧНЫЙ КОМПЛЕКС", "Дерево технологий DeadRig");
         LinearLayout list = content(dialog);

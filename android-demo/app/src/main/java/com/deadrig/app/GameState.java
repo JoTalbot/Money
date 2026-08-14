@@ -55,6 +55,8 @@ public class GameState {
             {5.0, -0.2}, {3.6, 2.6}, {-0.1, 5.0}, {-2.7, 3.4}
     };
     private final int[] placedTowerTypes = new int[TOWER_SLOTS.length]; // 0 пусто, 1 пулемёт, 2 лазер, 3 тесла
+    private final int[] towerLevels = new int[TOWER_SLOTS.length];
+    private int movingTowerSlot = -1;
     private int basicTurrets = 0;
     private int laserTurrets = 0;
     private int teslaTurrets = 0;
@@ -83,6 +85,8 @@ public class GameState {
         this.prefs = prefs;
         load();
         if (placedTowerCount() == 0) placedTowerTypes[0] = 1;
+        for (int i = 0; i < towerLevels.length; i++)
+            if (placedTowerTypes[i] != 0 && towerLevels[i] == 0) towerLevels[i] = 1;
         syncTurrets();
     }
 
@@ -97,6 +101,11 @@ public class GameState {
     public int towerTypeAt(int slot) {
         return slot >= 0 && slot < placedTowerTypes.length ? placedTowerTypes[slot] : 0;
     }
+    public int towerLevelAt(int slot) {
+        return slot >= 0 && slot < towerLevels.length ? Math.max(1, towerLevels[slot]) : 1;
+    }
+    public double towerUpgradeCost(int slot) { return 25.0 * Math.pow(towerLevelAt(slot), 1.65); }
+    public boolean isMovingTower() { return movingTowerSlot >= 0; }
     private int placedTowerCount() {
         int count = 0;
         for (int type : placedTowerTypes) if (type != 0) count++;
@@ -107,6 +116,15 @@ public class GameState {
     public String tryPlaceTower(int slot) {
         if (slot < 0 || slot >= placedTowerTypes.length) return "Неверная площадка";
         if (placedTowerTypes[slot] != 0) return "Площадка уже занята";
+        if (movingTowerSlot >= 0) {
+            placedTowerTypes[slot] = placedTowerTypes[movingTowerSlot];
+            towerLevels[slot] = towerLevels[movingTowerSlot];
+            placedTowerTypes[movingTowerSlot] = 0;
+            towerLevels[movingTowerSlot] = 0;
+            movingTowerSlot = -1;
+            syncTurrets();
+            return "Башня перемещена";
+        }
         int placedBasic = 0, placedLaser = 0, placedTesla = 0;
         for (int type : placedTowerTypes) {
             if (type == 1) placedBasic++;
@@ -119,8 +137,48 @@ public class GameState {
         else if (placedBasic < 1 + basicTurrets) type = 1;
         if (type == 0) return "Сначала создайте башню в цехе";
         placedTowerTypes[slot] = type;
+        towerLevels[slot] = 1;
         syncTurrets();
         return type == 3 ? "Тесла-башня установлена" : type == 2 ? "Лазерная башня установлена" : "Башня установлена";
+    }
+
+    public String tryUpgradeTower(int slot) {
+        if (towerTypeAt(slot) == 0) return "На площадке нет башни";
+        double cost = towerUpgradeCost(slot);
+        if (hashes < cost) return "Нужно " + fmt(cost) + " хешей";
+        hashes -= cost;
+        towerLevels[slot] = towerLevelAt(slot) + 1;
+        syncTurrets();
+        return "Башня улучшена до уровня " + towerLevels[slot];
+    }
+
+    public String beginMoveTower(int slot) {
+        if (towerTypeAt(slot) == 0) return "На площадке нет башни";
+        movingTowerSlot = slot;
+        return "Выберите свободную площадку";
+    }
+
+    public String cancelMoveTower() {
+        movingTowerSlot = -1;
+        return "Перемещение отменено";
+    }
+
+    public String trySellTower(int slot) {
+        int type = towerTypeAt(slot);
+        if (type == 0) return "На площадке нет башни";
+        if (turretCount() <= 1) return "Последнюю башню продавать нельзя";
+        if (type == 1) {
+            if (basicTurrets <= 0) return "Стартовую башню продавать нельзя";
+            basicTurrets--;
+        } else if (type == 2) laserTurrets--;
+        else if (type == 3) teslaTurrets--;
+        double refund = (type == 3 ? 65 : type == 2 ? 25 : 8) + towerLevelAt(slot) * 4;
+        scrap += refund;
+        placedTowerTypes[slot] = 0;
+        towerLevels[slot] = 0;
+        if (movingTowerSlot == slot) movingTowerSlot = -1;
+        syncTurrets();
+        return "Башня продана: +" + fmt(refund) + " лома";
     }
 
     // ===== действия игрока (всегда возвращают явный результат для интерфейса) =====
@@ -276,7 +334,7 @@ public class GameState {
                     double d = Math.max(.001, Math.hypot(dx, dy));
                     t.aimX = dx / d; t.aimY = dy / d;
                     double typeDamage = t.type == 3 ? 2.8 : t.type == 2 ? 2.0 : 1.0;
-                    double dmg = 10.0 * turretLevel * (1 + turretMult) * typeDamage;
+                    double dmg = 10.0 * turretLevel * t.level * (1 + turretMult) * typeDamage;
                     projectiles.add(new Projectile(t.x, t.y, target, dmg, t.type == 3 ? 10.0 : 14.0, t.type));
                     t.cooldown = (t.type == 3 ? 1.15 : t.type == 2 ? .85 : .7) / (1 + fireRateMult);
                 } else {
@@ -348,6 +406,7 @@ public class GameState {
             if (turret == null) turret = new Turret();
             turret.slot = slot;
             turret.type = type;
+            turret.level = towerLevelAt(slot);
             turret.x = TOWER_SLOTS[slot][0];
             turret.y = TOWER_SLOTS[slot][1];
             synced.add(turret);
@@ -405,8 +464,11 @@ public class GameState {
             o.put("fireRateMult", fireRateMult);
             o.put("rangeBonus", rangeBonus);
             JSONArray slots = new JSONArray();
+            JSONArray levels = new JSONArray();
             for (int type : placedTowerTypes) slots.put(type);
+            for (int level : towerLevels) levels.put(level);
             o.put("placedTowerTypes", slots);
+            o.put("towerLevels", levels);
             o.put("lastSeen", System.currentTimeMillis());
             JSONArray arr = new JSONArray();
             for (String s : doneResearch) arr.put(s);
@@ -446,6 +508,9 @@ public class GameState {
                 for (int i = 0; i < 1 + basicTurrets && index < placedTowerTypes.length; i++) placedTowerTypes[index++] = 1;
                 for (int i = 0; i < laserTurrets && index < placedTowerTypes.length; i++) placedTowerTypes[index++] = 2;
             }
+            JSONArray levels = o.optJSONArray("towerLevels");
+            if (levels != null)
+                for (int i = 0; i < towerLevels.length && i < levels.length(); i++) towerLevels[i] = levels.optInt(i, 1);
             long ls = o.getLong("lastSeen");
             JSONArray arr = o.optJSONArray("doneResearch");
             doneResearch.clear();
@@ -467,8 +532,8 @@ public class GameState {
         zombies.clear(); projectiles.clear(); turrets.clear();
         basicTurrets = 0; laserTurrets = 0; teslaTurrets = 0;
         fireRateMult = 0; rangeBonus = 0;
-        for (int i = 0; i < placedTowerTypes.length; i++) placedTowerTypes[i] = 0;
-        placedTowerTypes[0] = 1;
+        for (int i = 0; i < placedTowerTypes.length; i++) { placedTowerTypes[i] = 0; towerLevels[i] = 0; }
+        placedTowerTypes[0] = 1; towerLevels[0] = 1; movingTowerSlot = -1;
         doneResearch.clear(); activeResearchId = null; activeCraftId = null;
         activeResearchLeft = 0; activeCraftLeft = 0;
         gameOver = false;
@@ -524,6 +589,6 @@ public class GameState {
 
     public static class Turret {
         double x, y, cooldown, aimX = 1, aimY = 0;
-        int slot, type = 1;
+        int slot, type = 1, level = 1;
     }
 }

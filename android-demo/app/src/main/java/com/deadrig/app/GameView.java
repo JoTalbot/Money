@@ -35,7 +35,10 @@ public class GameView extends View {
     private static final int ORANGE = Color.rgb(226, 125, 35);
     private static final int RED = Color.rgb(244, 68, 86);
 
+    public interface SlotListener { void onOccupiedSlot(int slot); }
+
     private final GameState gs;
+    private final SlotListener slotListener;
     private long lastTime;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.DITHER_FLAG);
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.DITHER_FLAG);
@@ -45,9 +48,10 @@ public class GameView extends View {
     private float cx;
     private float cy;
 
-    public GameView(Context ctx, GameState gs) {
+    public GameView(Context ctx, GameState gs, SlotListener slotListener) {
         super(ctx);
         this.gs = gs;
+        this.slotListener = slotListener;
         stroke.setStyle(Paint.Style.STROKE);
         stroke.setStrokeJoin(Paint.Join.ROUND);
         stroke.setStrokeCap(Paint.Cap.ROUND);
@@ -193,9 +197,13 @@ public class GameView extends View {
             if (distance < bestDistance) { bestDistance = distance; best = i; }
         }
         if (best >= 0) {
-            String message = gs.tryPlaceTower(best);
-            Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
-            invalidate();
+            if (gs.towerTypeAt(best) != 0 && slotListener != null) {
+                slotListener.onOccupiedSlot(best);
+            } else {
+                String message = gs.tryPlaceTower(best);
+                Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
+                invalidate();
+            }
         }
         return true;
     }
@@ -309,6 +317,12 @@ public class GameView extends View {
         stroke.setStrokeWidth(s * .08f); stroke.setColor(energyColor);
         c.drawLine(p.x + dx * s, p.y - s * .52f + dy * s, p.x + dx * s * 1.4f, p.y - s * .52f + dy * s * 1.4f, stroke);
         paint.setColor(energyColor); c.drawCircle(p.x, p.y - s * .75f, s * .16f, paint);
+        if (t.level > 1) {
+            paint.setColor(Color.rgb(8, 19, 22)); c.drawCircle(p.x + s * .72f, p.y - s * .70f, s * .27f, paint);
+            paint.setColor(energyColor); paint.setTextAlign(Paint.Align.CENTER); paint.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            paint.setTextSize(s * .36f); c.drawText(String.valueOf(t.level), p.x + s * .72f, p.y - s * .58f, paint);
+            paint.setTextAlign(Paint.Align.LEFT); paint.setTypeface(null);
+        }
     }
 
     private void drawZombie(Canvas c, GameState.Zombie z) {
