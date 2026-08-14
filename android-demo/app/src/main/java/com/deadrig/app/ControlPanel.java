@@ -85,11 +85,12 @@ public final class ControlPanel {
         addCard(activity, list, "Улучшить ручное оружие",
                 "Повышает урон выстрелов игрока на 35%.\nСтоимость: " + GameState.fmt(state.manualUpgradeCost()) + " хешей",
                 "УЛУЧШИТЬ ОРУЖИЕ", true, v -> result(activity, state.tryUpgradeManualWeapon(), changed, dialog));
-        String[] weapons = {"Пистолет", "Автомат", "Дробовик", "Рельсотрон"};
-        for (int type = 0; type < weapons.length; type++) {
+        for (int type = 0; type < WeaponCatalog.COUNT; type++) {
             if (!state.ownsWeapon(type)) continue;
             final int weaponType = type;
-            addCard(activity, list, weapons[type], type == state.manualWeaponType() ? "Сейчас экипировано" : "Доступно для быстрого переключения",
+            String weaponInfo = state.weaponRarityName(type) + "  •  " + WeaponCatalog.ROLES[type]
+                    + (type == state.manualWeaponType() ? "\nСейчас экипировано" : "");
+            addCard(activity, list, WeaponCatalog.NAMES[type], weaponInfo,
                     type == state.manualWeaponType() ? null : "ЭКИПИРОВАТЬ", true,
                     v -> result(activity, state.equipManualWeapon(weaponType), changed, dialog));
         }
@@ -99,6 +100,16 @@ public final class ControlPanel {
                 v -> result(activity, state.upgradeWeaponModule(1), changed, dialog));
         addCard(activity, list, "Модуль магазина  ур." + state.magazineModuleLevel(), "+15% ёмкости за уровень", "УЛУЧШИТЬ", true,
                 v -> result(activity, state.upgradeWeaponModule(2), changed, dialog));
+        if (state.specialAmmoUnlocked()) {
+            String[] ammo = {"Обычные патроны", "Бронебойные", "Зажигательные", "Электрические"};
+            for (int i = 0; i < ammo.length; i++) {
+                final int ammoType = i;
+                addCard(activity, list, ammo[i], i == state.manualAmmoType() ? "Сейчас заряжены" : "Сменить тип боеприпасов",
+                        i == state.manualAmmoType() ? null : "ВЫБРАТЬ", true,
+                        v -> result(activity, state.selectAmmoType(ammoType), changed, dialog));
+            }
+        }
+        if (state.combatDroneUnlocked()) addMetric(activity, list, "БОЕВОЙ ДРОН", "АКТИВЕН");
         addCard(activity, list, "Усилить все башни",
                 "Повышает базовый урон всего оборонного контура.\nСтоимость: " + GameState.fmt(state.turretUpgradeCost()) + " хешей",
                 "УСИЛИТЬ", true, v -> result(activity, state.tryUpgradeTurret(), changed, dialog));
@@ -194,6 +205,14 @@ public final class ControlPanel {
         if ("weapon_auto".equals(item)) return "Высокий темп ручного огня при удержании";
         if ("weapon_shotgun".equals(item)) return "Дробь наносит урон группе зомби";
         if ("weapon_rail".equals(item)) return "Мощный бронебойный выстрел";
+        if ("weapon_sniper".equals(item)) return "Максимальный множитель попадания в голову";
+        if ("weapon_grenade".equals(item)) return "Взрыв поражает большую группу";
+        if ("weapon_flame".equals(item)) return "Поджигает цель продолжительным уроном";
+        if ("weapon_cryo".equals(item)) return "Замедляет и визуально замораживает";
+        if ("weapon_tesla".equals(item)) return "Цепной разряд по нескольким врагам";
+        if ("weapon_acid".equals(item)) return "Коррозия повышает последующий урон";
+        if ("combat_drone".equals(item)) return "Автоматически атакует ближайших врагов";
+        if ("special_ammo".equals(item)) return "Открывает три типа специальных патронов";
         return "Производственный проект";
     }
 

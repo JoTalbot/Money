@@ -86,6 +86,7 @@ public class GameView extends View {
         drawRoutesAndSlots(c);
         drawSpawnRifts(c);
         drawSortedActors(c);
+        drawCombatDrone(c);
         drawProjectiles(c);
         drawHitEffects(c);
         drawVignette(c, w, h);
@@ -418,6 +419,14 @@ public class GameView extends View {
             stroke.setColor(Color.argb(190, 118, 222, 255)); stroke.setStrokeWidth(s * .08f);
             c.drawCircle(p.x, p.y - s * .35f, s * .92f, stroke);
         }
+        if (z.burnTimer > 0) {
+            paint.setColor(Color.argb(190, 255, 86, 28));
+            triangle(c, p.x - s * .35f, p.y + s * .5f, p.x, p.y - s * .15f, p.x + s * .2f, p.y + s * .5f, paint);
+        }
+        if (z.acidTimer > 0) {
+            stroke.setColor(Color.argb(200, 151, 255, 68)); stroke.setStrokeWidth(s * .07f);
+            c.drawCircle(p.x, p.y - s * .25f, s * .75f, stroke);
+        }
         if (z == heldTarget && aimingAtEnemy && System.currentTimeMillis() - touchDownAt >= 650) {
             float r = s * 1.15f;
             stroke.setColor(Color.rgb(255, 210, 72)); stroke.setStrokeWidth(s * .055f);
@@ -427,13 +436,21 @@ public class GameView extends View {
         }
     }
 
+    private void drawCombatDrone(Canvas c) {
+        if (!gs.combatDroneUnlocked()) return;
+        PointF p = iso(-.7, .7);
+        float bob = (float) Math.sin(System.currentTimeMillis() * .006) * unit * .08f;
+        float r = unit * .24f;
+        paint.setColor(Color.argb(80, 70, 255, 220)); c.drawCircle(p.x, p.y - unit * 1.2f + bob, r * 2.3f, paint);
+        paint.setColor(Color.rgb(42, 72, 76)); diamond(c, p.x, p.y - unit * 1.2f + bob, r * 1.6f, r * .7f, paint);
+        paint.setColor(Color.rgb(100, 255, 220)); c.drawCircle(p.x, p.y - unit * 1.2f + bob, r * .42f, paint);
+    }
+
     private void drawProjectiles(Canvas c) {
         for (GameState.Projectile p : gs.projectiles) {
             PointF q = iso(p.x, p.y);
             float r = unit * (p.type == 3 || p.type == 13 ? .18f : .13f);
-            int glow = p.type == 13 ? Color.rgb(220, 246, 255) : p.type == 12 ? Color.rgb(160, 255, 104)
-                    : p.type == 11 ? Color.rgb(255, 187, 65) : p.type == 10 ? Color.rgb(255, 231, 118)
-                    : p.type == 4 ? Color.rgb(118, 222, 255) : p.type == 3 ? Color.rgb(212, 104, 255) : p.type == 2 ? CYAN : ORANGE;
+            int glow = projectileColor(p.type);
             paint.setShader(new RadialGradient(q.x, q.y - unit * .18f, r * 3f,
                     glow, Color.TRANSPARENT, Shader.TileMode.CLAMP));
             c.drawCircle(q.x, q.y - unit * .18f, r * 3f, paint); paint.setShader(null);
@@ -451,9 +468,7 @@ public class GameView extends View {
             PointF p = iso(effect.x, effect.y);
             float progress = (float) (effect.life / .28);
             float radius = unit * (.18f + (1f - progress) * .55f);
-            int color = effect.type == 13 ? Color.WHITE : effect.type == 12 ? Color.rgb(160, 255, 104)
-                    : effect.type >= 10 ? Color.rgb(255, 205, 83)
-                    : effect.type == 4 ? Color.rgb(118, 222, 255) : effect.type == 3 ? Color.rgb(211, 104, 255) : effect.type == 2 ? CYAN : ORANGE;
+            int color = projectileColor(effect.type);
             stroke.setColor(Color.argb((int) (220 * progress), Color.red(color), Color.green(color), Color.blue(color)));
             stroke.setStrokeWidth(unit * .07f * progress);
             c.drawCircle(p.x, p.y - unit * .25f, radius, stroke);
@@ -464,6 +479,23 @@ public class GameView extends View {
                         p.y - unit * .25f + (float) Math.sin(angle) * radius * .8f, stroke);
             }
         }
+    }
+
+    private int projectileColor(int type) {
+        if (type == 20) return Color.rgb(100, 255, 220);
+        if (type == 19) return Color.rgb(150, 255, 70);
+        if (type == 18) return Color.rgb(205, 112, 255);
+        if (type == 17) return Color.rgb(116, 222, 255);
+        if (type == 16) return Color.rgb(255, 92, 38);
+        if (type == 15) return Color.rgb(255, 150, 42);
+        if (type == 14) return Color.rgb(255, 75, 75);
+        if (type == 13) return Color.WHITE;
+        if (type == 12) return Color.rgb(160, 255, 104);
+        if (type == 11) return Color.rgb(255, 187, 65);
+        if (type == 10) return Color.rgb(255, 231, 118);
+        if (type == 4) return Color.rgb(118, 222, 255);
+        if (type == 3) return Color.rgb(211, 104, 255);
+        return type == 2 ? CYAN : ORANGE;
     }
 
     private void drawVignette(Canvas c, int w, int h) {

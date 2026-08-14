@@ -175,7 +175,8 @@ public class MainActivity extends Activity {
         String weaponState = gs.manualReloading() ? "ПЕРЕЗАРЯДКА" : gs.manualOverheated() ? "ПЕРЕГРЕВ"
                 : "БОЕЗАПАС " + gs.manualAmmo() + "/" + gs.manualMagazineSize();
         lblWeapon.setText("РУЧНОЙ ОГОНЬ  //  " + gs.manualWeaponName().toUpperCase()
-                + " УР." + gs.manualWeaponLevel() + "  •  " + weaponState
+                + " [" + gs.weaponRarityName(gs.manualWeaponType()).toUpperCase() + "] УР." + gs.manualWeaponLevel()
+                + "  •  " + weaponState + "  •  " + gs.manualAmmoTypeName().toUpperCase()
                 + (gs.manualCombo() > 1 ? "  •  КОМБО ×" + gs.manualCombo() : ""));
         lblResearch.setText("НАУКА  " + gs.researchStatus());
         lblCraft.setText("ЦЕХ  " + gs.craftStatus()

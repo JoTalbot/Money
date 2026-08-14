@@ -60,6 +60,23 @@ public class Defs {
         r = new ResearchDef(); r.id = "r_weapon_rail"; r.name = "Переносной рельсотрон"; r.desc = "Открывает бронебойный сверхвыстрел";
         r.requiresId = "r_weapon_shotgun"; r.costHashes = 520; r.costScrap = 160; r.durationSec = 360; r.effectType = -1; RESEARCH.add(r);
 
+        r = new ResearchDef(); r.id = "r_weapon_sniper"; r.name = "Снайперская платформа"; r.desc = "Открывает винтовку с ×3.15 уроном в голову";
+        r.requiresId = "r_weapon_rail"; r.costHashes = 650; r.costScrap = 190; r.durationSec = 420; r.effectType = -1; RESEARCH.add(r);
+        r = new ResearchDef(); r.id = "r_weapon_grenade"; r.name = "Микрогранаты"; r.desc = "Открывает взрывной урон по площади";
+        r.requiresId = "r_weapon_shotgun"; r.costHashes = 430; r.costScrap = 150; r.durationSec = 300; r.effectType = -1; RESEARCH.add(r);
+        r = new ResearchDef(); r.id = "r_weapon_flame"; r.name = "Термитная смесь"; r.desc = "Открывает огнемёт и горение";
+        r.requiresId = "r_weapon_grenade"; r.costHashes = 560; r.costScrap = 180; r.durationSec = 360; r.effectType = -1; RESEARCH.add(r);
+        r = new ResearchDef(); r.id = "r_weapon_cryo"; r.name = "Ручная крионика"; r.desc = "Открывает крио-пушку";
+        r.requiresId = "r_weapon_flame"; r.costHashes = 690; r.costScrap = 220; r.durationSec = 420; r.effectType = -1; RESEARCH.add(r);
+        r = new ResearchDef(); r.id = "r_weapon_tesla"; r.name = "Портативная тесла"; r.desc = "Открывает цепную тесла-винтовку";
+        r.requiresId = "r_weapon_cryo"; r.costHashes = 820; r.costScrap = 270; r.durationSec = 480; r.effectType = -1; RESEARCH.add(r);
+        r = new ResearchDef(); r.id = "r_weapon_acid"; r.name = "Коррозионная биохимия"; r.desc = "Открывает кислотомёт";
+        r.requiresId = "r_weapon_tesla"; r.costHashes = 940; r.costScrap = 310; r.durationSec = 540; r.effectType = -1; RESEARCH.add(r);
+        r = new ResearchDef(); r.id = "r_combat_drone"; r.name = "Боевой дрон"; r.desc = "Открывает автономного помощника";
+        r.requiresId = "r_weapon_auto"; r.costHashes = 350; r.costScrap = 120; r.durationSec = 250; r.effectType = -1; RESEARCH.add(r);
+        r = new ResearchDef(); r.id = "r_special_ammo"; r.name = "Специальные боеприпасы"; r.desc = "Бронебойные, зажигательные и электрические патроны";
+        r.requiresId = "r_weapon_auto"; r.costHashes = 300; r.costScrap = 100; r.durationSec = 220; r.effectType = -1; RESEARCH.add(r);
+
         RecipeDef c;
         c = new RecipeDef(); c.id = "turret_basic"; c.name = "Базовая турель"; c.outItem = "turret_basic";
         c.costHashes = 30; c.costScrap = 10; c.durationSec = 20; RECIPES.add(c);
@@ -87,6 +104,22 @@ public class Defs {
 
         c = new RecipeDef(); c.id = "weapon_rail"; c.name = "Переносной рельсотрон"; c.outItem = "weapon_rail";
         c.requiresResearchId = "r_weapon_rail"; c.costHashes = 480; c.costScrap = 180; c.durationSec = 220; RECIPES.add(c);
+        c = new RecipeDef(); c.id = "weapon_sniper"; c.name = "Снайперская винтовка"; c.outItem = "weapon_sniper";
+        c.requiresResearchId = "r_weapon_sniper"; c.costHashes = 620; c.costScrap = 220; c.durationSec = 260; RECIPES.add(c);
+        c = new RecipeDef(); c.id = "weapon_grenade"; c.name = "Гранатомёт"; c.outItem = "weapon_grenade";
+        c.requiresResearchId = "r_weapon_grenade"; c.costHashes = 420; c.costScrap = 170; c.durationSec = 190; RECIPES.add(c);
+        c = new RecipeDef(); c.id = "weapon_flame"; c.name = "Огнемёт"; c.outItem = "weapon_flame";
+        c.requiresResearchId = "r_weapon_flame"; c.costHashes = 540; c.costScrap = 210; c.durationSec = 230; RECIPES.add(c);
+        c = new RecipeDef(); c.id = "weapon_cryo"; c.name = "Крио-пушка"; c.outItem = "weapon_cryo";
+        c.requiresResearchId = "r_weapon_cryo"; c.costHashes = 660; c.costScrap = 250; c.durationSec = 270; RECIPES.add(c);
+        c = new RecipeDef(); c.id = "weapon_tesla"; c.name = "Тесла-винтовка"; c.outItem = "weapon_tesla";
+        c.requiresResearchId = "r_weapon_tesla"; c.costHashes = 780; c.costScrap = 290; c.durationSec = 310; RECIPES.add(c);
+        c = new RecipeDef(); c.id = "weapon_acid"; c.name = "Кислотомёт"; c.outItem = "weapon_acid";
+        c.requiresResearchId = "r_weapon_acid"; c.costHashes = 900; c.costScrap = 340; c.durationSec = 360; RECIPES.add(c);
+        c = new RecipeDef(); c.id = "combat_drone"; c.name = "Боевой дрон"; c.outItem = "combat_drone";
+        c.requiresResearchId = "r_combat_drone"; c.costHashes = 360; c.costScrap = 150; c.durationSec = 180; RECIPES.add(c);
+        c = new RecipeDef(); c.id = "special_ammo"; c.name = "Комплект специальных патронов"; c.outItem = "special_ammo";
+        c.requiresResearchId = "r_special_ammo"; c.costHashes = 240; c.costScrap = 110; c.durationSec = 130; RECIPES.add(c);
     }
 
     public static ResearchDef findResearch(String id) {

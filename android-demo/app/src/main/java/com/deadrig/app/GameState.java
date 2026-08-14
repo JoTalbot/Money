@@ -40,6 +40,14 @@ public class GameState {
     private double weaponAbilityCooldown = 0;
     private double overdriveTimer = 0;
     private double ultimateCharge = 0;
+    private int manualAmmoType = 0; // 0 обычные, 1 бронебойные, 2 зажигательные, 3 электрические
+    private boolean specialAmmoUnlocked = false;
+    private boolean combatDroneUnlocked = false;
+    private double droneCooldown = 0;
+    private final int[] weaponRarity = new int[WeaponCatalog.COUNT];
+    private final double[] weaponDamageRoll = new double[WeaponCatalog.COUNT];
+    private final double[] weaponSpeedRoll = new double[WeaponCatalog.COUNT];
+    private final double[] weaponCritRoll = new double[WeaponCatalog.COUNT];
 
     // --- мета-прогресс и ежедневные задания ---
     private int prestigeLevel = 0;
@@ -116,11 +124,29 @@ public class GameState {
     public GameState(SharedPreferences prefs) {
         this.prefs = prefs;
         load();
+        ensureWeaponRolls();
         checkDailyReset();
         if (placedTowerCount() == 0) placedTowerTypes[0] = 1;
         for (int i = 0; i < towerLevels.length; i++)
             if (placedTowerTypes[i] != 0 && towerLevels[i] == 0) towerLevels[i] = 1;
         syncTurrets();
+    }
+
+    private void ensureWeaponRolls() {
+        for (int i = 0; i < WeaponCatalog.COUNT; i++) {
+            if (weaponDamageRoll[i] <= 0) weaponDamageRoll[i] = .92 + Math.random() * .17;
+            if (weaponSpeedRoll[i] <= 0) weaponSpeedRoll[i] = .93 + Math.random() * .15;
+            if (weaponCritRoll[i] <= 0) weaponCritRoll[i] = Math.random() * .06;
+        }
+    }
+
+    private void rollCraftedWeapon(int type) {
+        type = WeaponCatalog.clamp(type);
+        double roll = Math.random();
+        weaponRarity[type] = roll > .985 ? 3 : roll > .90 ? 2 : roll > .65 ? 1 : 0;
+        weaponDamageRoll[type] = .90 + Math.random() * .23;
+        weaponSpeedRoll[type] = .91 + Math.random() * .19;
+        weaponCritRoll[type] = Math.random() * .09;
     }
 
     // ===== формулы =====
@@ -156,7 +182,7 @@ public class GameState {
     public int manualWeaponType() { return manualWeaponType; }
     public int manualWeaponLevel() { return manualWeaponLevel; }
     public int manualMagazineSize() {
-        int base = manualWeaponType == 3 ? 3 : manualWeaponType == 2 ? 6 : manualWeaponType == 1 ? 30 : 12;
+        int base = WeaponCatalog.MAGAZINE[WeaponCatalog.clamp(manualWeaponType)];
         return Math.max(1, (int) Math.round(base * (1 + magazineModuleLevel * .15)));
     }
     public int manualAmmo() { return manualAmmo; }
@@ -170,13 +196,20 @@ public class GameState {
     public boolean ownsWeapon(int type) { return (ownedWeaponMask & (1 << type)) != 0; }
     public int weaponAbilityCooldownSeconds() { return (int) Math.ceil(weaponAbilityCooldown); }
     public int ultimatePercent() { return (int) Math.min(100, Math.round(ultimateCharge)); }
-    public String manualWeaponName() {
-        return manualWeaponType == 3 ? "Рельсотрон" : manualWeaponType == 2 ? "Дробовик"
-                : manualWeaponType == 1 ? "Автомат" : "Пистолет";
+    public int manualAmmoType() { return manualAmmoType; }
+    public String manualAmmoTypeName() {
+        String[] names = {"обычные", "ББ", "огонь", "электро"};
+        return names[Math.max(0, Math.min(3, manualAmmoType))];
     }
+    public boolean specialAmmoUnlocked() { return specialAmmoUnlocked; }
+    public boolean combatDroneUnlocked() { return combatDroneUnlocked; }
+    public int weaponRarity(int type) { return weaponRarity[WeaponCatalog.clamp(type)]; }
+    public String weaponRarityName(int type) { return WeaponCatalog.RARITY[weaponRarity(type)]; }
+    public String manualWeaponName() { return WeaponCatalog.NAMES[WeaponCatalog.clamp(manualWeaponType)]; }
     public double manualWeaponDamage() {
-        double base = manualWeaponType == 3 ? 65 : manualWeaponType == 2 ? 24 : manualWeaponType == 1 ? 9 : 14;
-        return base * (1 + (manualWeaponLevel - 1) * .35) * (1 + damageModuleLevel * .12);
+        int type = WeaponCatalog.clamp(manualWeaponType);
+        return WeaponCatalog.DAMAGE[type] * WeaponCatalog.RARITY_MULT[weaponRarity[type]] * weaponDamageRoll[type]
+                * (1 + (manualWeaponLevel - 1) * .35) * (1 + damageModuleLevel * .12);
     }
     public double manualUpgradeCost() { return 20.0 * Math.pow(1.7, manualWeaponLevel - 1); }
     public int turretCount() { return placedTowerCount(); }
@@ -241,9 +274,17 @@ public class GameState {
     }
 
     public String equipManualWeapon(int type) {
-        if (type < 0 || type > 3 || !ownsWeapon(type)) return "Оружие ещё не создано";
+        if (type < 0 || type >= WeaponCatalog.COUNT || !ownsWeapon(type)) return "Оружие ещё не создано";
         manualWeaponType = type; manualAmmo = manualMagazineSize(); manualHeat = 0; manualReloadTimer = 0;
         return manualWeaponName() + " экипирован";
+    }
+
+    public String selectAmmoType(int type) {
+        if (type < 0 || type > 3) return "Неизвестный тип боеприпасов";
+        if (type > 0 && !specialAmmoUnlocked) return "Сначала исследуйте специальные боеприпасы";
+        manualAmmoType = type;
+        String[] names = {"Обычные", "Бронебойные", "Зажигательные", "Электрические"};
+        return "Боеприпасы: " + names[type];
     }
 
     public String upgradeWeaponModule(int module) {
@@ -301,24 +342,27 @@ public class GameState {
                 || manualReloadTimer > 0 || manualOverheated) return false;
         if (manualAmmo <= 0) { startManualReload(); return false; }
 
-        boolean critical = Math.random() < Math.min(.55, .10 + manualWeaponLevel * .012 + (preciseAim ? .18 : 0));
+        int weapon = WeaponCatalog.clamp(manualWeaponType);
+        boolean critical = Math.random() < Math.min(.65, .10 + manualWeaponLevel * .012
+                + weaponCritRoll[weapon] + (preciseAim ? .18 : 0));
+        double headMultiplier = weapon == 4 ? 3.15 : 2.2;
         double damage = manualWeaponDamage() * (charged ? 1.65 : 1.0)
-                * (headshot ? 2.2 : 1.0) * (preciseAim ? 1.28 : 1.0) * (critical ? 1.75 : 1.0);
-        double interval = manualWeaponType == 3 ? .90 : manualWeaponType == 2 ? .62
-                : manualWeaponType == 1 ? .11 : .32;
+                * (headshot ? headMultiplier : 1.0) * (preciseAim ? 1.28 : 1.0) * (critical ? 1.75 : 1.0);
+        double interval = WeaponCatalog.INTERVAL[weapon] / weaponSpeedRoll[weapon];
         if (overdriveTimer > 0) interval *= .48;
         manualCooldown = interval * (charged ? 1.12 : 1.0);
         manualAmmo--;
-        double heatGain = manualWeaponType == 3 ? .46 : manualWeaponType == 2 ? .22 : manualWeaponType == 1 ? .045 : .12;
+        double heatGain = WeaponCatalog.HEAT[weapon];
         if (overdriveTimer > 0) heatGain *= .45;
         manualHeat = Math.min(1.2, manualHeat + heatGain);
         if (manualHeat >= 1.0) manualOverheated = true;
         if (manualAmmo <= 0) startManualReload();
         dailyShots++;
-        Projectile shot = new Projectile(0, 0, target, damage,
-                manualWeaponType == 3 ? 30 : 18, 10 + manualWeaponType);
+        double projectileSpeed = weapon == 3 || weapon == 4 ? 30 : weapon == 5 ? 10 : weapon == 6 ? 12 : 18;
+        Projectile shot = new Projectile(0, 0, target, damage, projectileSpeed, 10 + weapon);
         shot.critical = critical;
         shot.headshot = headshot;
+        shot.ammoType = manualAmmoType;
         projectiles.add(shot);
         return true;
     }
@@ -326,7 +370,7 @@ public class GameState {
     public String startManualReload() {
         if (manualAmmo >= manualMagazineSize()) return "Магазин уже полный";
         if (manualReloadTimer > 0) return "Перезарядка уже идёт";
-        manualReloadTimer = manualWeaponType == 3 ? 1.8 : manualWeaponType == 2 ? 1.45 : 1.15;
+        manualReloadTimer = WeaponCatalog.RELOAD[WeaponCatalog.clamp(manualWeaponType)];
         return "Перезарядка";
     }
 
@@ -444,9 +488,10 @@ public class GameState {
             return "Нужно исследование: " + (required != null ? required.name : recipe.requiresResearchId);
         }
         boolean tower = recipe.outItem.startsWith("turret_") && !recipe.outItem.equals("turret_module");
-        int weaponTier = recipe.outItem.equals("weapon_rail") ? 3 : recipe.outItem.equals("weapon_shotgun") ? 2
-                : recipe.outItem.equals("weapon_auto") ? 1 : 0;
+        int weaponTier = weaponTypeForItem(recipe.outItem);
         if (weaponTier > 0 && ownsWeapon(weaponTier)) return "Это оружие уже создано";
+        if ("combat_drone".equals(recipe.outItem) && combatDroneUnlocked) return "Боевой дрон уже создан";
+        if ("special_ammo".equals(recipe.outItem) && specialAmmoUnlocked) return "Специальные боеприпасы уже открыты";
         if (tower && pendingTowerCount() > 0) return "Сначала установите башню из резерва";
         if (tower && placedTowerCount() >= TOWER_SLOTS.length) return "Все площадки заняты";
         if (hashes < recipe.costHashes || scrap < recipe.costScrap)
@@ -454,6 +499,19 @@ public class GameState {
         hashes -= recipe.costHashes; scrap -= recipe.costScrap;
         activeCraftId = recipe.id; activeCraftLeft = recipe.durationSec;
         return "Производство: " + recipe.name;
+    }
+
+    private int weaponTypeForItem(String item) {
+        if ("weapon_auto".equals(item)) return 1;
+        if ("weapon_shotgun".equals(item)) return 2;
+        if ("weapon_rail".equals(item)) return 3;
+        if ("weapon_sniper".equals(item)) return 4;
+        if ("weapon_grenade".equals(item)) return 5;
+        if ("weapon_flame".equals(item)) return 6;
+        if ("weapon_cryo".equals(item)) return 7;
+        if ("weapon_tesla".equals(item)) return 8;
+        if ("weapon_acid".equals(item)) return 9;
+        return 0;
     }
 
     public boolean isUnlocked(Defs.RecipeDef r) {
@@ -466,6 +524,7 @@ public class GameState {
         manualCooldown = Math.max(0, manualCooldown - dt);
         weaponAbilityCooldown = Math.max(0, weaponAbilityCooldown - dt);
         overdriveTimer = Math.max(0, overdriveTimer - dt);
+        droneCooldown = Math.max(0, droneCooldown - dt);
         manualHeat = Math.max(0, manualHeat - dt * (.28 + coolingModuleLevel * .08));
         if (manualOverheated && manualHeat <= .45) manualOverheated = false;
         if (manualReloadTimer > 0) {
@@ -481,6 +540,8 @@ public class GameState {
         // Движение по маршрутам tower defense и урон базе в конечной точке.
         for (int i = zombies.size() - 1; i >= 0; i--) {
             Zombie z = zombies.get(i);
+            if (z.burnTimer > 0) { z.burnTimer -= dt; z.hp -= z.burnDps * dt; }
+            z.acidTimer = Math.max(0, z.acidTimer - dt);
             double[][] route = PATHS[z.pathId];
             if (z.pathIndex >= route.length) {
                 baseHp -= z.damage;
@@ -541,6 +602,14 @@ public class GameState {
             }
         }
 
+        if (combatDroneUnlocked && droneCooldown <= 0 && !zombies.isEmpty()) {
+            Zombie target = nearestZombie(0, 0, 8.0);
+            if (target != null) {
+                projectiles.add(new Projectile(-.7, .7, target, 8 * (1 + prestigeLevel * .12), 16, 20));
+                droneCooldown = .55;
+            }
+        }
+
         // снаряды
         for (int i = projectiles.size() - 1; i >= 0; i--) {
             Projectile p = projectiles.get(i);
@@ -555,8 +624,16 @@ public class GameState {
                 if (p.target.type == 4 && p.type == 3) resistance = 1.15;
                 if (p.target.type == 2 && (p.type == 10 || p.type == 11)) resistance = .65;
                 if (p.target.type == 2 && p.type == 13) resistance = 1.55; // рельсотрон пробивает броню
+                if (p.target.acidTimer > 0) resistance *= 1.28;
+                if (p.ammoType == 1 && p.target.type == 2) resistance *= 1.55;
                 p.target.hp -= p.damage * resistance;
-                if (p.type >= 10) p.target.lastHitManual = true;
+                if (p.type >= 10 && p.type < 20) p.target.lastHitManual = true;
+                if (p.type == 16 || p.ammoType == 2) {
+                    p.target.burnTimer = Math.max(p.target.burnTimer, 3.5);
+                    p.target.burnDps = Math.max(p.target.burnDps, p.damage * .32);
+                }
+                if (p.type == 17) p.target.slowTimer = Math.max(p.target.slowTimer, 4.0);
+                if (p.type == 19) p.target.acidTimer = Math.max(p.target.acidTimer, 5.0);
                 if (p.type == 4) p.target.slowTimer = Math.max(p.target.slowTimer, 3.2);
                 if (p.type == 3) { // цепная молния переходит ещё на две близкие цели
                     int chains = 0;
@@ -569,10 +646,22 @@ public class GameState {
                         }
                     }
                 }
-                if (p.type == 12) { // дробовик задевает группу вокруг цели
+                if (p.type == 12 || p.type == 15) { // дробовик или гранатомёт
+                    double radius = p.type == 15 ? 2.15 : 1.25;
+                    double splash = p.type == 15 ? .72 : .42;
                     for (Zombie other : zombies)
-                        if (other != p.target && Math.hypot(other.x - p.target.x, other.y - p.target.y) < 1.25)
-                            other.hp -= p.damage * .42;
+                        if (other != p.target && Math.hypot(other.x - p.target.x, other.y - p.target.y) < radius)
+                            other.hp -= p.damage * splash;
+                }
+                if (p.type == 18 || p.ammoType == 3) { // тесла-винтовка или электрические патроны
+                    int chains = 0;
+                    for (Zombie other : zombies) {
+                        if (other == p.target || chains >= (p.type == 18 ? 3 : 1)) continue;
+                        if (Math.hypot(other.x - p.target.x, other.y - p.target.y) < 1.7) {
+                            other.hp -= p.damage * (p.type == 18 ? .55 : .28);
+                            hitEffects.add(new HitEffect(other.x, other.y, 18)); chains++;
+                        }
+                    }
                 }
                 hitEffects.add(new HitEffect(p.x, p.y, p.type));
                 projectiles.remove(i);
@@ -684,14 +773,19 @@ public class GameState {
     private void completeCraft() {
         Defs.RecipeDef r = Defs.findRecipe(activeCraftId);
         if (r != null) {
-            if (r.outItem.equals("turret_basic")) basicTurrets++;
+            int craftedWeapon = weaponTypeForItem(r.outItem);
+            if (craftedWeapon > 0) {
+                ownedWeaponMask |= 1 << craftedWeapon;
+                manualWeaponType = craftedWeapon;
+                rollCraftedWeapon(craftedWeapon);
+                manualAmmo = manualMagazineSize();
+            } else if (r.outItem.equals("combat_drone")) combatDroneUnlocked = true;
+            else if (r.outItem.equals("special_ammo")) specialAmmoUnlocked = true;
+            else if (r.outItem.equals("turret_basic")) basicTurrets++;
             else if (r.outItem.equals("turret_laser")) laserTurrets++;
             else if (r.outItem.equals("turret_tesla")) teslaTurrets++;
             else if (r.outItem.equals("turret_cryo")) cryoTurrets++;
             else if (r.outItem.equals("turret_module")) turretLevel++;
-            else if (r.outItem.equals("weapon_auto")) { ownedWeaponMask |= 1 << 1; manualWeaponType = 1; manualAmmo = manualMagazineSize(); }
-            else if (r.outItem.equals("weapon_shotgun")) { ownedWeaponMask |= 1 << 2; manualWeaponType = 2; manualAmmo = manualMagazineSize(); }
-            else if (r.outItem.equals("weapon_rail")) { ownedWeaponMask |= 1 << 3; manualWeaponType = 3; manualAmmo = manualMagazineSize(); }
             else if (r.outItem.equals("wall")) {
                 baseMaxHp += 20;
                 baseHp = Math.min(baseMaxHp, baseHp + 20);
@@ -727,6 +821,16 @@ public class GameState {
             o.put("coolingModuleLevel", coolingModuleLevel);
             o.put("magazineModuleLevel", magazineModuleLevel);
             o.put("ultimateCharge", ultimateCharge);
+            o.put("manualAmmoType", manualAmmoType);
+            o.put("specialAmmoUnlocked", specialAmmoUnlocked);
+            o.put("combatDroneUnlocked", combatDroneUnlocked);
+            JSONArray rarity = new JSONArray(), damageRolls = new JSONArray(), speedRolls = new JSONArray(), critRolls = new JSONArray();
+            for (int i = 0; i < WeaponCatalog.COUNT; i++) {
+                rarity.put(weaponRarity[i]); damageRolls.put(weaponDamageRoll[i]);
+                speedRolls.put(weaponSpeedRoll[i]); critRolls.put(weaponCritRoll[i]);
+            }
+            o.put("weaponRarity", rarity); o.put("weaponDamageRoll", damageRolls);
+            o.put("weaponSpeedRoll", speedRolls); o.put("weaponCritRoll", critRolls);
             o.put("prestigeLevel", prestigeLevel);
             o.put("dailyKey", dailyKey);
             o.put("dailyKills", dailyKills);
@@ -778,6 +882,19 @@ public class GameState {
             coolingModuleLevel = o.optInt("coolingModuleLevel", 0);
             magazineModuleLevel = o.optInt("magazineModuleLevel", 0);
             ultimateCharge = o.optDouble("ultimateCharge", 0);
+            manualAmmoType = o.optInt("manualAmmoType", 0);
+            specialAmmoUnlocked = o.optBoolean("specialAmmoUnlocked", false);
+            combatDroneUnlocked = o.optBoolean("combatDroneUnlocked", false);
+            JSONArray rarity = o.optJSONArray("weaponRarity");
+            JSONArray damageRolls = o.optJSONArray("weaponDamageRoll");
+            JSONArray speedRolls = o.optJSONArray("weaponSpeedRoll");
+            JSONArray critRolls = o.optJSONArray("weaponCritRoll");
+            for (int i = 0; i < WeaponCatalog.COUNT; i++) {
+                if (rarity != null) weaponRarity[i] = rarity.optInt(i, 0);
+                if (damageRolls != null) weaponDamageRoll[i] = damageRolls.optDouble(i, 0);
+                if (speedRolls != null) weaponSpeedRoll[i] = speedRolls.optDouble(i, 0);
+                if (critRolls != null) weaponCritRoll[i] = critRolls.optDouble(i, 0);
+            }
             prestigeLevel = o.optInt("prestigeLevel", 0);
             dailyKey = o.optString("dailyKey", "");
             dailyKills = o.optInt("dailyKills", 0);
@@ -828,6 +945,11 @@ public class GameState {
         manualReloadTimer = 0; manualHeat = 0; manualOverheated = false; manualCombo = 0; manualComboTimer = 0;
         ownedWeaponMask = 1; damageModuleLevel = coolingModuleLevel = magazineModuleLevel = 0;
         weaponAbilityCooldown = overdriveTimer = ultimateCharge = 0; prestigeLevel = 0;
+        manualAmmoType = 0; specialAmmoUnlocked = false; combatDroneUnlocked = false; droneCooldown = 0;
+        for (int i = 0; i < WeaponCatalog.COUNT; i++) {
+            weaponRarity[i] = 0; weaponDamageRoll[i] = weaponSpeedRoll[i] = weaponCritRoll[i] = 0;
+        }
+        ensureWeaponRolls();
         dailyKey = ""; dailyKills = dailyWaves = dailyShots = 0; dailyClaimed = false;
         miningMult = 0; turretMult = 0; scrapMult = 0;
         baseHp = 100; baseMaxHp = 100;
@@ -873,7 +995,7 @@ public class GameState {
 
     // ===== сущности =====
     public static class Zombie {
-        double x, y, hp, maxHp, speed, damage, slowTimer;
+        double x, y, hp, maxHp, speed, damage, slowTimer, burnTimer, burnDps, acidTimer;
         int pathId, pathIndex = 1, type;
         boolean lastHitManual;
         Zombie(double x, double y, double hp, double speed, double damage, int pathId, int type) {
@@ -890,7 +1012,7 @@ public class GameState {
 
     public static class Projectile {
         double x, y, damage, speed;
-        int type;
+        int type, ammoType;
         boolean critical, headshot;
         Zombie target;
         Projectile(double x, double y, Zombie t, double dmg, double spd, int type) {
