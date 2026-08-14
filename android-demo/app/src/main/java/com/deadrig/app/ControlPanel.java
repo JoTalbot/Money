@@ -78,6 +78,10 @@ public final class ControlPanel {
                 + percent(state.turretFireRateBonus()) + " темп  •  +" + String.format(Locale.US, "%.1f", state.turretRangeBonus()) + " дальность");
         addMetric(activity, list, "РУЧНОЕ ОРУЖИЕ", state.manualWeaponName() + "  ур." + state.manualWeaponLevel()
                 + "  •  " + GameState.fmt(state.manualWeaponDamage()) + " урона");
+        addMetric(activity, list, "МАГАЗИН / НАГРЕВ", state.manualAmmo() + "/" + state.manualMagazineSize()
+                + "  •  " + Math.round(state.manualHeat() * 100) + "%");
+        addCard(activity, list, "Перезарядить оружие", "Ручная перезарядка до начала следующей атаки.",
+                "ПЕРЕЗАРЯДИТЬ", true, v -> result(activity, state.startManualReload(), changed, dialog));
         addCard(activity, list, "Улучшить ручное оружие",
                 "Повышает урон выстрелов игрока на 35%.\nСтоимость: " + GameState.fmt(state.manualUpgradeCost()) + " хешей",
                 "УЛУЧШИТЬ ОРУЖИЕ", true, v -> result(activity, state.tryUpgradeManualWeapon(), changed, dialog));

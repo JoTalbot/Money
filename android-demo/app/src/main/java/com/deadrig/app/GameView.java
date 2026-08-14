@@ -50,6 +50,7 @@ public class GameView extends View {
     private GameState.Zombie heldTarget;
     private long touchDownAt;
     private boolean aimingAtEnemy;
+    private boolean aimingHeadshot;
 
     public GameView(Context ctx, GameState gs, SlotListener slotListener) {
         super(ctx);
@@ -71,7 +72,7 @@ public class GameView extends View {
         if (dt > 0) gs.update(dt);
         if (aimingAtEnemy && heldTarget != null && now - touchDownAt >= 180) {
             if (!gs.zombies.contains(heldTarget)) heldTarget = null;
-            else if (gs.manualShoot(heldTarget, false))
+            else if (gs.manualShoot(heldTarget, false, aimingHeadshot))
                 performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
         }
 
@@ -200,12 +201,16 @@ public class GameView extends View {
         if (event.getAction() == MotionEvent.ACTION_DOWN) {
             heldTarget = touchedZombie(event.getX(), event.getY());
             aimingAtEnemy = heldTarget != null;
+            aimingHeadshot = heldTarget != null && isHeadshot(heldTarget, event.getY());
             touchDownAt = System.currentTimeMillis();
             return true;
         }
         if (event.getAction() == MotionEvent.ACTION_MOVE && aimingAtEnemy) {
             GameState.Zombie movedTarget = touchedZombie(event.getX(), event.getY());
-            if (movedTarget != null) heldTarget = movedTarget;
+            if (movedTarget != null) {
+                heldTarget = movedTarget;
+                aimingHeadshot = isHeadshot(movedTarget, event.getY());
+            }
             return true;
         }
         if (event.getAction() == MotionEvent.ACTION_CANCEL) {
@@ -215,7 +220,7 @@ public class GameView extends View {
 
         if (aimingAtEnemy) {
             boolean shortTap = System.currentTimeMillis() - touchDownAt < 220;
-            if (heldTarget != null && gs.manualShoot(heldTarget, shortTap))
+            if (heldTarget != null && gs.manualShoot(heldTarget, shortTap, aimingHeadshot))
                 performHapticFeedback(shortTap ? android.view.HapticFeedbackConstants.LONG_PRESS
                         : android.view.HapticFeedbackConstants.VIRTUAL_KEY);
             aimingAtEnemy = false; heldTarget = null;
@@ -251,6 +256,12 @@ public class GameView extends View {
             if (distance < bestDistance) { bestDistance = distance; best = zombie; }
         }
         return best;
+    }
+
+    private boolean isHeadshot(GameState.Zombie zombie, float touchY) {
+        PointF p = iso(zombie.x, zombie.y);
+        float scale = zombie.type == 4 ? .72f : zombie.type == 2 ? .48f : zombie.type == 1 ? .32f : .38f;
+        return touchY < p.y - unit * scale * .72f;
     }
 
     private void drawSpawnRifts(Canvas c) {
@@ -420,6 +431,11 @@ public class GameView extends View {
                     glow, Color.TRANSPARENT, Shader.TileMode.CLAMP));
             c.drawCircle(q.x, q.y - unit * .18f, r * 3f, paint); paint.setShader(null);
             paint.setColor(Color.WHITE); c.drawCircle(q.x, q.y - unit * .18f, r, paint);
+            if (p.critical || p.headshot) {
+                stroke.setColor(p.headshot ? Color.rgb(255, 72, 72) : Color.rgb(255, 220, 80));
+                stroke.setStrokeWidth(unit * .045f);
+                c.drawCircle(q.x, q.y - unit * .18f, r * 2.2f, stroke);
+            }
         }
     }
 

@@ -27,6 +27,12 @@ public class GameState {
     private int manualWeaponType = 0; // 0 пистолет, 1 автомат, 2 дробовик, 3 рельсотрон
     private int manualWeaponLevel = 1;
     private double manualCooldown = 0;
+    private int manualAmmo = 12;
+    private double manualReloadTimer = 0;
+    private double manualHeat = 0;
+    private boolean manualOverheated = false;
+    private int manualCombo = 0;
+    private double manualComboTimer = 0;
 
     // --- мета-прогресс и ежедневные задания ---
     private int prestigeLevel = 0;
@@ -131,6 +137,7 @@ public class GameState {
         if (hashes < prestigeRequirement()) return "Нужно " + fmt(prestigeRequirement()) + " хешей";
         prestigeLevel++;
         hashes = 0; scrap = 0; minerLevel = 1; turretLevel = 1; manualWeaponLevel = 1;
+        manualAmmo = manualMagazineSize(); manualHeat = 0; manualReloadTimer = 0; manualCombo = 0;
         wave = 0; waveActive = false; zombies.clear(); projectiles.clear(); hitEffects.clear();
         basicTurrets = laserTurrets = teslaTurrets = cryoTurrets = 0;
         for (int i = 0; i < placedTowerTypes.length; i++) { placedTowerTypes[i] = 0; towerLevels[i] = 0; }
@@ -141,6 +148,14 @@ public class GameState {
     public double turretUpgradeCost() { return 15.0 * Math.pow(1.6, turretLevel - 1); }
     public int manualWeaponType() { return manualWeaponType; }
     public int manualWeaponLevel() { return manualWeaponLevel; }
+    public int manualMagazineSize() {
+        return manualWeaponType == 3 ? 3 : manualWeaponType == 2 ? 6 : manualWeaponType == 1 ? 30 : 12;
+    }
+    public int manualAmmo() { return manualAmmo; }
+    public double manualHeat() { return manualHeat; }
+    public boolean manualOverheated() { return manualOverheated; }
+    public boolean manualReloading() { return manualReloadTimer > 0; }
+    public int manualCombo() { return manualCombo; }
     public String manualWeaponName() {
         return manualWeaponType == 3 ? "Рельсотрон" : manualWeaponType == 2 ? "Дробовик"
                 : manualWeaponType == 1 ? "Автомат" : "Пистолет";
@@ -219,17 +234,37 @@ public class GameState {
         return manualWeaponName() + " улучшен до уровня " + manualWeaponLevel;
     }
 
-    /** Ручной выстрел: charged=true для усиленного короткого нажатия. */
-    public boolean manualShoot(Zombie target, boolean charged) {
-        if (target == null || !zombies.contains(target) || manualCooldown > 0 || gameOver) return false;
-        double damage = manualWeaponDamage() * (charged ? 1.65 : 1.0);
+    /** Ручной выстрел с критами, попаданием в голову, магазином и перегревом. */
+    public boolean manualShoot(Zombie target, boolean charged, boolean headshot) {
+        if (target == null || !zombies.contains(target) || manualCooldown > 0 || gameOver
+                || manualReloadTimer > 0 || manualOverheated) return false;
+        if (manualAmmo <= 0) { startManualReload(); return false; }
+
+        boolean critical = Math.random() < Math.min(.35, .10 + manualWeaponLevel * .012);
+        double damage = manualWeaponDamage() * (charged ? 1.65 : 1.0)
+                * (headshot ? 2.2 : 1.0) * (critical ? 1.75 : 1.0);
         double interval = manualWeaponType == 3 ? .90 : manualWeaponType == 2 ? .62
                 : manualWeaponType == 1 ? .11 : .32;
         manualCooldown = interval * (charged ? 1.12 : 1.0);
+        manualAmmo--;
+        manualHeat = Math.min(1.2, manualHeat + (manualWeaponType == 3 ? .46
+                : manualWeaponType == 2 ? .22 : manualWeaponType == 1 ? .045 : .12));
+        if (manualHeat >= 1.0) manualOverheated = true;
+        if (manualAmmo <= 0) startManualReload();
         dailyShots++;
-        projectiles.add(new Projectile(0, 0, target, damage,
-                manualWeaponType == 3 ? 30 : 18, 10 + manualWeaponType));
+        Projectile shot = new Projectile(0, 0, target, damage,
+                manualWeaponType == 3 ? 30 : 18, 10 + manualWeaponType);
+        shot.critical = critical;
+        shot.headshot = headshot;
+        projectiles.add(shot);
         return true;
+    }
+
+    public String startManualReload() {
+        if (manualAmmo >= manualMagazineSize()) return "Магазин уже полный";
+        if (manualReloadTimer > 0) return "Перезарядка уже идёт";
+        manualReloadTimer = manualWeaponType == 3 ? 1.8 : manualWeaponType == 2 ? 1.45 : 1.15;
+        return "Перезарядка";
     }
 
     public String beginMoveTower(int slot) {
@@ -366,6 +401,16 @@ public class GameState {
     public void update(double dt) {
         if (gameOver) return;
         manualCooldown = Math.max(0, manualCooldown - dt);
+        manualHeat = Math.max(0, manualHeat - dt * .28);
+        if (manualOverheated && manualHeat <= .45) manualOverheated = false;
+        if (manualReloadTimer > 0) {
+            manualReloadTimer -= dt;
+            if (manualReloadTimer <= 0) { manualReloadTimer = 0; manualAmmo = manualMagazineSize(); }
+        }
+        if (manualComboTimer > 0) {
+            manualComboTimer -= dt;
+            if (manualComboTimer <= 0) manualCombo = 0;
+        }
         hashes += miningRate() * dt;
 
         // Движение по маршрутам tower defense и урон базе в конечной точке.
@@ -446,6 +491,7 @@ public class GameState {
                 if (p.target.type == 2 && (p.type == 10 || p.type == 11)) resistance = .65;
                 if (p.target.type == 2 && p.type == 13) resistance = 1.55; // рельсотрон пробивает броню
                 p.target.hp -= p.damage * resistance;
+                if (p.type >= 10) p.target.lastHitManual = true;
                 if (p.type == 4) p.target.slowTimer = Math.max(p.target.slowTimer, 3.2);
                 if (p.type == 3) { // цепная молния переходит ещё на две близкие цели
                     int chains = 0;
@@ -470,8 +516,17 @@ public class GameState {
             p.x += dx / d * p.speed * dt;
             p.y += dy / d * p.speed * dt;
         }
-        for (int i = zombies.size() - 1; i >= 0; i--)
-            if (zombies.get(i).hp <= 0) { zombies.remove(i); dailyKills++; }
+        for (int i = zombies.size() - 1; i >= 0; i--) {
+            Zombie dead = zombies.get(i);
+            if (dead.hp <= 0) {
+                if (dead.lastHitManual) {
+                    manualCombo = Math.min(99, manualCombo + 1);
+                    manualComboTimer = 3.0;
+                    hashes += Math.min(20, manualCombo * .35);
+                }
+                zombies.remove(i); dailyKills++;
+            }
+        }
 
         for (int i = hitEffects.size() - 1; i >= 0; i--) {
             HitEffect effect = hitEffects.get(i);
@@ -568,9 +623,9 @@ public class GameState {
             else if (r.outItem.equals("turret_tesla")) teslaTurrets++;
             else if (r.outItem.equals("turret_cryo")) cryoTurrets++;
             else if (r.outItem.equals("turret_module")) turretLevel++;
-            else if (r.outItem.equals("weapon_auto")) manualWeaponType = Math.max(manualWeaponType, 1);
-            else if (r.outItem.equals("weapon_shotgun")) manualWeaponType = Math.max(manualWeaponType, 2);
-            else if (r.outItem.equals("weapon_rail")) manualWeaponType = Math.max(manualWeaponType, 3);
+            else if (r.outItem.equals("weapon_auto")) { manualWeaponType = Math.max(manualWeaponType, 1); manualAmmo = manualMagazineSize(); }
+            else if (r.outItem.equals("weapon_shotgun")) { manualWeaponType = Math.max(manualWeaponType, 2); manualAmmo = manualMagazineSize(); }
+            else if (r.outItem.equals("weapon_rail")) { manualWeaponType = Math.max(manualWeaponType, 3); manualAmmo = manualMagazineSize(); }
             else if (r.outItem.equals("wall")) {
                 baseMaxHp += 20;
                 baseHp = Math.min(baseMaxHp, baseHp + 20);
@@ -599,6 +654,8 @@ public class GameState {
             o.put("turretLevel", turretLevel);
             o.put("manualWeaponType", manualWeaponType);
             o.put("manualWeaponLevel", manualWeaponLevel);
+            o.put("manualAmmo", manualAmmo);
+            o.put("manualHeat", manualHeat);
             o.put("prestigeLevel", prestigeLevel);
             o.put("dailyKey", dailyKey);
             o.put("dailyKills", dailyKills);
@@ -643,6 +700,8 @@ public class GameState {
             turretLevel = o.getInt("turretLevel");
             manualWeaponType = o.optInt("manualWeaponType", 0);
             manualWeaponLevel = Math.max(1, o.optInt("manualWeaponLevel", 1));
+            manualAmmo = o.optInt("manualAmmo", manualMagazineSize());
+            manualHeat = o.optDouble("manualHeat", 0);
             prestigeLevel = o.optInt("prestigeLevel", 0);
             dailyKey = o.optString("dailyKey", "");
             dailyKills = o.optInt("dailyKills", 0);
@@ -689,7 +748,9 @@ public class GameState {
 
     public void reset() {
         hashes = 0; scrap = 0; crystals = 0; minerLevel = 1; turretLevel = 1;
-        manualWeaponType = 0; manualWeaponLevel = 1; manualCooldown = 0; prestigeLevel = 0;
+        manualWeaponType = 0; manualWeaponLevel = 1; manualCooldown = 0; manualAmmo = 12;
+        manualReloadTimer = 0; manualHeat = 0; manualOverheated = false; manualCombo = 0; manualComboTimer = 0;
+        prestigeLevel = 0;
         dailyKey = ""; dailyKills = dailyWaves = dailyShots = 0; dailyClaimed = false;
         miningMult = 0; turretMult = 0; scrapMult = 0;
         baseHp = 100; baseMaxHp = 100;
@@ -737,6 +798,7 @@ public class GameState {
     public static class Zombie {
         double x, y, hp, maxHp, speed, damage, slowTimer;
         int pathId, pathIndex = 1, type;
+        boolean lastHitManual;
         Zombie(double x, double y, double hp, double speed, double damage, int pathId, int type) {
             this.x = x; this.y = y; this.hp = hp; this.maxHp = hp; this.speed = speed; this.damage = damage;
             this.pathId = pathId; this.type = type;
@@ -752,6 +814,7 @@ public class GameState {
     public static class Projectile {
         double x, y, damage, speed;
         int type;
+        boolean critical, headshot;
         Zombie target;
         Projectile(double x, double y, Zombie t, double dmg, double spd, int type) {
             this.x = x; this.y = y; target = t; damage = dmg; speed = spd; this.type = type;

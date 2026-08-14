@@ -165,8 +165,11 @@ public class MainActivity extends Activity {
         lblBase.setText("БАЗА  " + (int) Math.ceil(gs.baseHp) + "/" + (int) gs.baseMaxHp
                 + "  •  Т" + gs.turretCount());
         lblBase.setTextColor(gs.baseHp <= gs.baseMaxHp * .3 ? Color.rgb(255, 74, 78) : CYAN);
+        String weaponState = gs.manualReloading() ? "ПЕРЕЗАРЯДКА" : gs.manualOverheated() ? "ПЕРЕГРЕВ"
+                : "БОЕЗАПАС " + gs.manualAmmo() + "/" + gs.manualMagazineSize();
         lblWeapon.setText("РУЧНОЙ ОГОНЬ  //  " + gs.manualWeaponName().toUpperCase()
-                + "  УР." + gs.manualWeaponLevel() + "  •  НАЖАТЬ / УДЕРЖИВАТЬ ЗОМБИ");
+                + " УР." + gs.manualWeaponLevel() + "  •  " + weaponState
+                + (gs.manualCombo() > 1 ? "  •  КОМБО ×" + gs.manualCombo() : ""));
         lblResearch.setText("НАУКА  " + gs.researchStatus());
         lblCraft.setText("ЦЕХ  " + gs.craftStatus()
                 + (gs.pendingTowerCount() > 0 ? "  •  РЕЗЕРВ " + gs.pendingTowerCount() : ""));
