@@ -16,8 +16,9 @@ Assets/
 │   ├── Core/          # Ядро: GameManager, EconomyManager, WaveManager, SaveManager,
 │   │                  # MetaProgression, ResearchManager, CraftingManager,
 │   │                  # ResearchCatalog, CraftingCatalog, Bootstrap
-│   ├── UI/            # HUD, экраны (появится на фазе UI)
-│   ├── Game/          # Геймплей: враги, турели, герои (появится на фазе 1)
+│   ├── Game/          # Геймплей-прототип: Enemy, Turret, Projectile, BaseCore,
+│   │                  # WaveController, PrototypeBuilder (сборка уровня кодом)
+│   ├── UI/            # HUD (программный, uGUI)
 │   └── Data/          # ScriptableObject-конфиги (появятся позже)
 ├── Editor/            # Редакторные утилиты (SetupScene)
 └── Art/               # Спрайты, анимации (пока пусто)
@@ -37,6 +38,13 @@ Assets/
 | `SaveManager` | JSON-сейв/лоад, версия, защита от повреждения, миграции |
 | `MetaProgression` | Престиж и множители |
 | `Bootstrap` | Автосоздание GameManager в сцене |
+| `Enemy` | Зомби: движение к ядру, урон базе, смерть (реестр `Enemy.All`) |
+| `Turret` | Поиск цели, поворот, стрельба (урон × бонус исследований) |
+| `Projectile` | Снаряд: полёт к цели, урон |
+| `BaseCore` | Ядро базы: HP, поражение (событие OnGameOver) |
+| `WaveController` | Спавн врагов по волнам, автозапуск следующей волны |
+| `PrototypeBuilder` | Собирает уровень + HUD из кода (примитивы, без ассетов) |
+| `HUD` | Программный UI: валюты, кнопки, экран поражения |
 
 ## 4. Поток времени (оффлайн-прогресс)
 

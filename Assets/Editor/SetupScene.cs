@@ -19,6 +19,10 @@ namespace DeadRig.EditorTools
             var go = new GameObject("Bootstrap");
             go.AddComponent<DeadRig.Core.Bootstrap>();
 
+            // Прототип: собирает уровень и HUD из кода (без ассетов)
+            var builder = new GameObject("PrototypeBuilder");
+            builder.AddComponent<DeadRig.Game.PrototypeBuilder>();
+
             if (!AssetDatabase.IsValidFolder("Assets/Scenes"))
                 AssetDatabase.CreateFolder("Assets", "Scenes");
 
