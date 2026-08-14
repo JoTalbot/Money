@@ -276,14 +276,54 @@ public final class ControlPanel {
     }
 
     public static void showResearch(Activity activity, GameState state, OnChanged changed) {
-        Dialog dialog = create(activity, "НАУЧНЫЙ КОМПЛЕКС", "Дерево технологий DeadRig");
+        Dialog dialog = create(activity, "НАУЧНЫЙ КОМПЛЕКС", "Визуальное дерево технологий DeadRig");
         LinearLayout list = content(dialog);
-        if (state.activeResearchId != null) {
-            Defs.ResearchDef active = Defs.findResearch(state.activeResearchId);
-            addCard(activity, list, "В РАБОТЕ  //  " + active.name,
-                    "Осталось примерно " + (int) Math.ceil(state.activeResearchSeconds()) + " сек.", null, false, null);
+        addMetric(activity, list, "ОЧКИ НАУКИ", GameState.fmt(state.sciencePoints()));
+        addMetric(activity, list, "ЛАБОРАТОРИИ", state.activeResearchCount() + "/" + state.labSlots());
+        addMetric(activity, list, "СПЕЦИАЛИСТ", state.scientistName());
+        addMetric(activity, list, "ОБРАЗЦЫ БОССОВ", String.valueOf(state.bossSamples()));
+        addMetric(activity, list, "ДОКТРИНА", state.scienceDoctrine() == 1 ? "Наступление" : state.scienceDoctrine() == 2 ? "Выживание" : "Не выбрана");
+        for (int slot = 0; slot < state.labSlots(); slot++) {
+            if (!"—".equals(state.activeResearchName(slot)))
+                addCard(activity, list, "ЛАБОРАТОРИЯ " + (slot + 1) + "  //  " + state.activeResearchName(slot),
+                        "Осталось примерно " + state.activeResearchSeconds(slot) + " сек.", null, false, null);
         }
+        addCard(activity, list, "Расширить лаборатории", "До трёх параллельных исследовательских слотов.", "ОТКРЫТЬ СЛОТ", true,
+                v -> result(activity, state.upgradeLaboratory(), changed, dialog));
+        addCard(activity, list, "Назначить учёного", "Оружейник, экономист, биолог или инженер ускоряет профильные проекты.", "СМЕНИТЬ", true,
+                v -> result(activity, state.cycleScientist(), changed, dialog));
+        addCard(activity, list, "Анализ образца босса", "+45 науки и +30 биоматериала.", "АНАЛИЗИРОВАТЬ", state.bossSamples() > 0,
+                v -> result(activity, state.analyzeBossSample(), changed, dialog));
+        addCard(activity, list, "Ускорить лаборатории", "−60 секунд всем проектам за биоматериал и электронику.", "УСКОРИТЬ", state.activeResearchCount() > 0,
+                v -> result(activity, state.accelerateResearch(), changed, dialog));
+        if (state.experimentSeconds() > 0) addCard(activity, list, "ЭКСПЕРИМЕНТ В РАБОТЕ", "Осталось " + state.experimentSeconds() + " сек. Шанс успеха 72%.", null, false, null);
+        else {
+            addCard(activity, list, "Эксперимент: экономика", "Рискованный постоянный бонус майнинга.", "ЗАПУСТИТЬ", true,
+                    v -> result(activity, state.startExperiment(0), changed, dialog));
+            addCard(activity, list, "Эксперимент: вооружение", "Рискованный постоянный бонус башен.", "ЗАПУСТИТЬ", true,
+                    v -> result(activity, state.startExperiment(1), changed, dialog));
+            addCard(activity, list, "Эксперимент: укрепление", "Рискованное увеличение максимального HP.", "ЗАПУСТИТЬ", true,
+                    v -> result(activity, state.startExperiment(2), changed, dialog));
+        }
+        addCard(activity, list, "Повторяемая экономика  ур." + state.repeatableScienceLevel(0), "+3% дохода за уровень.", "ИЗУЧИТЬ", true,
+                v -> result(activity, state.upgradeRepeatableScience(0), changed, dialog));
+        addCard(activity, list, "Повторяемый урон  ур." + state.repeatableScienceLevel(1), "+3% урона башен за уровень.", "ИЗУЧИТЬ", true,
+                v -> result(activity, state.upgradeRepeatableScience(1), changed, dialog));
+        addCard(activity, list, "Повторяемая защита  ур." + state.repeatableScienceLevel(2), "−2.5% урона базе за уровень.", "ИЗУЧИТЬ", true,
+                v -> result(activity, state.upgradeRepeatableScience(2), changed, dialog));
+        if (state.scienceDoctrine() == 0) {
+            addCard(activity, list, "Доктрина наступления", "+15% ручного и башенного урона. Выбор необратим.", "ВЫБРАТЬ", true,
+                    v -> result(activity, state.chooseScienceDoctrine(1), changed, dialog));
+            addCard(activity, list, "Доктрина выживания", "−28% урона ядру. Выбор необратим.", "ВЫБРАТЬ", true,
+                    v -> result(activity, state.chooseScienceDoctrine(2), changed, dialog));
+        }
+        addCard(activity, list, "Наука новой игры+  ур." + state.prestigeScienceLevel(), "+4% дохода за уровень, доступно после престижа.", "УЛУЧШИТЬ", true,
+                v -> result(activity, state.upgradePrestigeScience(), changed, dialog));
+
+        String lastBranch = "";
         for (Defs.ResearchDef def : Defs.RESEARCH) {
+            String branch = researchBranch(def.id);
+            if (!branch.equals(lastBranch)) { addHint(activity, list, "ВЕТКА  //  " + branch); lastBranch = branch; }
             boolean done = state.doneResearch.contains(def.id);
             boolean unlocked = def.requiresId == null || state.doneResearch.contains(def.requiresId);
             String requirement = "";
@@ -300,6 +340,12 @@ public final class ControlPanel {
         dialog.show(); fit(dialog);
     }
 
+    private static String researchBranch(String id) {
+        if (id.contains("weapon") || id.contains("ammo") || id.contains("drone")) return "РУЧНОЕ ОРУЖИЕ";
+        if (id.contains("mining") || id.contains("scrap")) return "ЭКОНОМИКА";
+        if (id.contains("cryo") || id.contains("acid") || id.contains("zombie")) return "БИОЛОГИЯ";
+        return "ОБОРОНА И ИНЖЕНЕРИЯ";
+    }
     public static void showWorkshop(Activity activity, GameState state, OnChanged changed) {
         Dialog dialog = create(activity, "ПРОИЗВОДСТВЕННЫЙ ЦЕХ", "Выберите конкретный рецепт");
         LinearLayout list = content(dialog);

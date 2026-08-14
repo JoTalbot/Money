@@ -149,10 +149,44 @@ public class GameState {
     public final List<String> doneResearch = new ArrayList<>();
     public String activeResearchId = null;
     private double activeResearchLeft = 0;
+    private final String[] extraResearchIds = new String[2];
+    private final double[] extraResearchTimers = new double[2];
+    private int labSlots = 1;
+    private int scientistType = 0; // 0 нет, 1 оружие, 2 экономика, 3 биология, 4 инженерия
+    private double sciencePoints = 0;
+    private int bossSamples = 0;
+    private double experimentTimer = 0;
+    private int experimentType = -1;
+    private final int[] repeatableScience = new int[3]; // доход, урон, защита
+    private int scienceDoctrine = 0; // 1 наступление, 2 выживание
+    private int prestigeScienceLevel = 0;
     public String activeCraftId = null;
     private double activeCraftLeft = 0;
 
     public double activeResearchSeconds() { return Math.max(0, activeResearchLeft); }
+    public int labSlots() { return labSlots; }
+    public double sciencePoints() { return sciencePoints; }
+    public int bossSamples() { return bossSamples; }
+    public int scientistType() { return scientistType; }
+    public int scienceDoctrine() { return scienceDoctrine; }
+    public int prestigeScienceLevel() { return prestigeScienceLevel; }
+    public int repeatableScienceLevel(int type) { return type >= 0 && type < 3 ? repeatableScience[type] : 0; }
+    public int experimentSeconds() { return (int) Math.ceil(Math.max(0, experimentTimer)); }
+    public int activeResearchCount() {
+        int count = activeResearchId != null ? 1 : 0;
+        for (String id : extraResearchIds) if (id != null) count++;
+        return count;
+    }
+    public String activeResearchName(int index) {
+        String id = index == 0 ? activeResearchId : index <= 2 ? extraResearchIds[index - 1] : null;
+        Defs.ResearchDef def = id == null ? null : Defs.findResearch(id); return def == null ? "—" : def.name;
+    }
+    public int activeResearchSeconds(int index) {
+        return (int) Math.ceil(Math.max(0, index == 0 ? activeResearchLeft : index <= 2 ? extraResearchTimers[index - 1] : 0));
+    }
+    public String scientistName() {
+        String[] names = {"Нет", "Оружейник", "Экономист", "Биолог", "Инженер"}; return names[scientistType];
+    }
     public double activeCraftSeconds() { return Math.max(0, activeCraftLeft); }
     public double turretDamageBonus() { return turretMult; }
     public double turretFireRateBonus() { return fireRateMult; }
@@ -199,7 +233,8 @@ public class GameState {
         double durabilityFactor = .30 + .70 * Math.max(0, minerDurability) / 100.0;
         double specialization = baseSpecialization == 1 ? 1.25 : 1.0;
         return 1.0 * minerLevel * (1 + miningMult) * (1 + prestigeLevel * .5)
-                * (1 + capturedNodes * .15 + networkNodes * .10) * energyFactor * durabilityFactor * specialization;
+                * (1 + capturedNodes * .15 + networkNodes * .10 + repeatableScience[0] * .03 + prestigeScienceLevel * .04)
+                * energyFactor * durabilityFactor * specialization;
     }
     public double energy() { return energy; }
     public double maxEnergy() { return maxEnergy; }
@@ -277,6 +312,65 @@ public class GameState {
         if (hashes < cost || electronics < 20 + networkNodes * 15) return "Не хватает хешей или электроники";
         hashes -= cost; electronics -= 20 + networkNodes * 15; networkNodes++;
         return "Подключён сетевой узел " + networkNodes + "/5";
+    }
+    public String upgradeLaboratory() {
+        if (labSlots >= 3) return "Все лаборатории уже открыты";
+        double scienceCost = 35 + labSlots * 30, electronicCost = 25 + labSlots * 20;
+        if (sciencePoints < scienceCost || electronics < electronicCost) return "Не хватает науки или электроники";
+        sciencePoints -= scienceCost; electronics -= electronicCost; labSlots++;
+        return "Открыта лаборатория: слотов " + labSlots;
+    }
+    public String cycleScientist() {
+        double cost = scientistType == 0 ? 20 : 10;
+        if (sciencePoints < cost) return "Нужно " + fmt(cost) + " очков науки";
+        sciencePoints -= cost; scientistType = scientistType % 4 + 1;
+        return "Назначен специалист: " + scientistName();
+    }
+    public String analyzeBossSample() {
+        if (bossSamples <= 0) return "Нет образцов босса";
+        bossSamples--; sciencePoints += 45; biomass += 30;
+        return "Анализ завершён: +45 науки и +30 биоматериала";
+    }
+    public String startExperiment(int type) {
+        if (experimentTimer > 0) return "Эксперимент уже идёт";
+        if (sciencePoints < 55 || electronics < 18) return "Нужно 55 науки и 18 электроники";
+        sciencePoints -= 55; electronics -= 18; experimentType = Math.max(0, Math.min(2, type)); experimentTimer = 90;
+        return "Экспериментальный проект запущен";
+    }
+    public String upgradeRepeatableScience(int type) {
+        if (type < 0 || type > 2) return "Проект не найден";
+        double cost = 25 * Math.pow(1.55, repeatableScience[type]);
+        if (sciencePoints < cost) return "Нужно " + fmt(cost) + " науки";
+        sciencePoints -= cost; repeatableScience[type]++;
+        return "Повторяемый проект: уровень " + repeatableScience[type];
+    }
+    public String chooseScienceDoctrine(int doctrine) {
+        if (scienceDoctrine != 0) return "Научная доктрина уже выбрана";
+        if (doctrine < 1 || doctrine > 2 || sciencePoints < 80) return "Нужно 80 науки";
+        sciencePoints -= 80; scienceDoctrine = doctrine;
+        return doctrine == 1 ? "Выбрана доктрина наступления" : "Выбрана доктрина выживания";
+    }
+    public String accelerateResearch() {
+        if (activeResearchCount() == 0) return "Нет активных исследований";
+        if (biomass < 30 || electronics < 10) return "Нужно 30 биоматериала и 10 электроники";
+        biomass -= 30; electronics -= 10; activeResearchLeft = Math.max(0, activeResearchLeft - 60);
+        for (int i = 0; i < extraResearchTimers.length; i++) extraResearchTimers[i] = Math.max(0, extraResearchTimers[i] - 60);
+        return "Все исследования ускорены на 60 секунд";
+    }
+    public String upgradePrestigeScience() {
+        if (prestigeLevel <= 0) return "Доступно после первого престижа";
+        double cost = 100 * (prestigeScienceLevel + 1);
+        if (sciencePoints < cost) return "Нужно " + fmt(cost) + " науки";
+        sciencePoints -= cost; prestigeScienceLevel++;
+        return "Наука новой игры+: уровень " + prestigeScienceLevel;
+    }
+    private double researchDurationMultiplier(String id) {
+        double mult = baseSpecialization == 3 ? .75 : 1.0;
+        if (scientistType == 1 && id.contains("weapon")) mult *= .78;
+        else if (scientistType == 2 && (id.contains("mining") || id.contains("scrap"))) mult *= .78;
+        else if (scientistType == 3 && (id.contains("cryo") || id.contains("acid") || id.contains("zombie"))) mult *= .78;
+        else if (scientistType == 4 && (id.contains("turret") || id.contains("module") || id.contains("rocket"))) mult *= .78;
+        return mult;
     }
     public int difficulty() { return difficulty; }
     public int waveModifier() { return waveModifier; }
@@ -368,7 +462,7 @@ public class GameState {
         return "Ежедневная награда: +5 кристаллов и +75 лома";
     }
     public String tryPrestige() {
-        if (activeResearchId != null || activeCraftId != null) return "Сначала завершите исследование и производство";
+        if (activeResearchCount() > 0 || activeCraftId != null) return "Сначала завершите исследования и производство";
         if (hashes < prestigeRequirement()) return "Нужно " + fmt(prestigeRequirement()) + " хешей";
         prestigeLevel++;
         hashes = 0; scrap = 0; minerLevel = 1; turretLevel = 1; manualWeaponLevel = 1;
@@ -417,7 +511,8 @@ public class GameState {
     public double manualWeaponDamage() {
         int type = WeaponCatalog.clamp(manualWeaponType);
         return WeaponCatalog.DAMAGE[type] * WeaponCatalog.RARITY_MULT[weaponRarity[type]] * weaponDamageRoll[type]
-                * (1 + (manualWeaponLevel - 1) * .35) * (1 + damageModuleLevel * .12);
+                * (1 + (manualWeaponLevel - 1) * .35) * (1 + damageModuleLevel * .12)
+                * (scienceDoctrine == 1 ? 1.15 : 1.0);
     }
     public double manualUpgradeCost() { return 20.0 * Math.pow(1.7, manualWeaponLevel - 1); }
     public int turretCount() { return placedTowerCount(); }
@@ -704,7 +799,9 @@ public class GameState {
 
     /** Запускает выбранный игроком проект из экрана науки. */
     public String tryStartResearch(String id) {
-        if (activeResearchId != null) return "Исследование уже идёт";
+        if (activeResearchCount() >= labSlots) return "Все лаборатории заняты";
+        if (id != null && (id.equals(activeResearchId) || id.equals(extraResearchIds[0]) || id.equals(extraResearchIds[1])))
+            return "Этот проект уже исследуется";
         Defs.ResearchDef def = Defs.findResearch(id);
         if (def == null) return "Проект не найден";
         if (doneResearch.contains(id)) return "Уже изучено";
@@ -713,7 +810,12 @@ public class GameState {
         if (hashes < def.costHashes || scrap < def.costScrap)
             return "Нужно " + fmt(def.costHashes) + " хешей и " + fmt(def.costScrap) + " лома";
         hashes -= def.costHashes; scrap -= def.costScrap;
-        activeResearchId = def.id; activeResearchLeft = def.durationSec * (baseSpecialization == 3 ? .75 : 1.0);
+        double duration = def.durationSec * researchDurationMultiplier(def.id);
+        if (activeResearchId == null) { activeResearchId = def.id; activeResearchLeft = duration; }
+        else {
+            for (int i = 0; i < extraResearchIds.length; i++)
+                if (extraResearchIds[i] == null) { extraResearchIds[i] = def.id; extraResearchTimers[i] = duration; break; }
+        }
         return "Начато: " + def.name;
     }
 
@@ -826,7 +928,7 @@ public class GameState {
             manualComboTimer -= dt;
             if (manualComboTimer <= 0) manualCombo = 0;
         }
-        double energyUse = minerLevel * .08 + turretCount() * .28 + (activeResearchId != null ? .30 : 0);
+        double energyUse = minerLevel * .08 + turretCount() * .28 + activeResearchCount() * .30;
         double generated = generatorLevel * 1.5;
         energy += (generated - energyUse) * dt;
         if (energy < 5 && fuel > 0) { double burn = Math.min(fuel, .12 * dt); fuel -= burn; energy += burn * 28; }
@@ -892,7 +994,8 @@ public class GameState {
                         platformDisabledTimer[slot] = Math.max(platformDisabledTimer[slot], 3.5);
             }
             if (z.pathIndex >= PATHS[z.pathId].length) {
-                baseHp -= z.damage * (challengeMode == 3 ? 2.0 : 1.0);
+                double defenseMult = (scienceDoctrine == 2 ? .72 : 1.0) * Math.max(.55, 1 - repeatableScience[2] * .025);
+                baseHp -= z.damage * (challengeMode == 3 ? 2.0 : 1.0) * defenseMult;
                 if (z.type == 10) {
                     baseHp -= 18;
                     for (int slot = 0; slot < platformHealth.length; slot++)
@@ -978,7 +1081,8 @@ public class GameState {
                     double typeDamage = t.type == 5 ? 2.4 : t.type == 4 ? .72 : t.type == 3 ? 2.8 : t.type == 2 ? 2.0 : 1.0;
                     double branchDamage = t.branch == 1 ? 1.45 : 1.0;
                     double supportBoost = 1 + nearbySupportCount(t.x, t.y) * .18;
-                    double specializationBoost = baseSpecialization == 2 ? 1.20 : 1.0;
+                    double specializationBoost = (baseSpecialization == 2 ? 1.20 : 1.0)
+                            * (1 + repeatableScience[1] * .03) * (scienceDoctrine == 1 ? 1.15 : 1.0);
                     double dmg = 10.0 * turretLevel * t.level * (1 + turretMult) * typeDamage * branchDamage * supportBoost * specializationBoost;
                     double speed = t.type == 5 ? 8 : t.type == 3 ? 10 : t.type == 4 ? 12 : 14;
                     Projectile projectile = new Projectile(t.x, t.y, target, dmg, speed, t.type);
@@ -1094,6 +1198,8 @@ public class GameState {
                     hashes += Math.min(20, manualCombo * .35);
                 }
                 enemySeen[dead.type] = true; enemyKills[dead.type]++;
+                sciencePoints += dead.type == 4 ? 18 : dead.type >= 5 ? 2.5 : 1;
+                if (dead.type == 4) bossSamples++;
                 zombies.remove(i); dailyKills++;
             }
         }
@@ -1104,10 +1210,29 @@ public class GameState {
             if (effect.life <= 0) hitEffects.remove(i);
         }
 
-        // исследование
+        // Параллельные лаборатории и экспериментальные проекты.
         if (activeResearchId != null) {
             activeResearchLeft -= dt;
-            if (activeResearchLeft <= 0) completeResearch();
+            if (activeResearchLeft <= 0) { String completed = activeResearchId; activeResearchId = null; completeResearch(completed); }
+        }
+        for (int i = 0; i < extraResearchIds.length; i++) {
+            if (extraResearchIds[i] == null) continue;
+            extraResearchTimers[i] -= dt;
+            if (extraResearchTimers[i] <= 0) {
+                String completed = extraResearchIds[i]; extraResearchIds[i] = null; extraResearchTimers[i] = 0; completeResearch(completed);
+            }
+        }
+        if (experimentTimer > 0) {
+            experimentTimer -= dt;
+            if (experimentTimer <= 0) {
+                boolean success = Math.random() < .72;
+                if (success) {
+                    if (experimentType == 0) miningMult += .08;
+                    else if (experimentType == 1) turretMult += .08;
+                    else baseMaxHp += 15;
+                } else electronics = Math.max(0, electronics - 12);
+                experimentType = -1; experimentTimer = 0;
+            }
         }
 
         // крафт
@@ -1241,9 +1366,10 @@ public class GameState {
         turrets.addAll(synced);
     }
 
-    private void completeResearch() {
-        Defs.ResearchDef d = Defs.findResearch(activeResearchId);
-        doneResearch.add(activeResearchId);
+    private void completeResearch(String id) {
+        if (id == null || doneResearch.contains(id)) return;
+        Defs.ResearchDef d = Defs.findResearch(id);
+        doneResearch.add(id);
         if (d != null) {
             if (d.effectType == 0) miningMult += d.value;
             else if (d.effectType == 1) turretMult += d.value;
@@ -1251,7 +1377,6 @@ public class GameState {
             else if (d.effectType == 3) fireRateMult += d.value;
             else if (d.effectType == 4) rangeBonus += d.value;
         }
-        activeResearchId = null;
     }
 
     private void completeCraft() {
@@ -1355,6 +1480,15 @@ public class GameState {
             o.put("mineCharges", mineCharges);
             o.put("fireRateMult", fireRateMult);
             o.put("rangeBonus", rangeBonus);
+            o.put("activeResearchId", activeResearchId); o.put("activeResearchLeft", activeResearchLeft);
+            o.put("activeCraftId", activeCraftId); o.put("activeCraftLeft", activeCraftLeft);
+            o.put("labSlots", labSlots); o.put("scientistType", scientistType); o.put("sciencePoints", sciencePoints);
+            o.put("bossSamples", bossSamples); o.put("experimentTimer", experimentTimer); o.put("experimentType", experimentType);
+            o.put("scienceDoctrine", scienceDoctrine); o.put("prestigeScienceLevel", prestigeScienceLevel);
+            JSONArray extraIds = new JSONArray(), extraTimers = new JSONArray(), repeatable = new JSONArray();
+            for (int i = 0; i < extraResearchIds.length; i++) { extraIds.put(extraResearchIds[i]); extraTimers.put(extraResearchTimers[i]); }
+            for (int level : repeatableScience) repeatable.put(level);
+            o.put("extraResearchIds", extraIds); o.put("extraResearchTimers", extraTimers); o.put("repeatableScience", repeatable);
             JSONArray slots = new JSONArray(), levels = new JSONArray(), priorities = new JSONArray();
             JSONArray branches = new JSONArray(), evolutions = new JSONArray();
             for (int i = 0; i < placedTowerTypes.length; i++) {
@@ -1446,6 +1580,22 @@ public class GameState {
             mineCharges = o.optInt("mineCharges", 0);
             fireRateMult = o.optDouble("fireRateMult", 0);
             rangeBonus = o.optDouble("rangeBonus", 0);
+            activeResearchId = o.isNull("activeResearchId") ? null : o.optString("activeResearchId", null);
+            activeResearchLeft = o.optDouble("activeResearchLeft", 0);
+            activeCraftId = o.isNull("activeCraftId") ? null : o.optString("activeCraftId", null);
+            activeCraftLeft = o.optDouble("activeCraftLeft", 0);
+            labSlots = Math.max(1, Math.min(3, o.optInt("labSlots", 1)));
+            scientistType = o.optInt("scientistType", 0); sciencePoints = o.optDouble("sciencePoints", 0);
+            bossSamples = o.optInt("bossSamples", 0); experimentTimer = o.optDouble("experimentTimer", 0);
+            experimentType = o.optInt("experimentType", -1); scienceDoctrine = o.optInt("scienceDoctrine", 0);
+            prestigeScienceLevel = o.optInt("prestigeScienceLevel", 0);
+            JSONArray extraIds = o.optJSONArray("extraResearchIds"), extraTimers = o.optJSONArray("extraResearchTimers");
+            JSONArray repeatable = o.optJSONArray("repeatableScience");
+            for (int i = 0; i < extraResearchIds.length; i++) {
+                if (extraIds != null && !extraIds.isNull(i)) extraResearchIds[i] = extraIds.optString(i, null);
+                if (extraTimers != null) extraResearchTimers[i] = extraTimers.optDouble(i, 0);
+            }
+            if (repeatable != null) for (int i = 0; i < repeatableScience.length; i++) repeatableScience[i] = repeatable.optInt(i, 0);
             JSONArray slots = o.optJSONArray("placedTowerTypes");
             if (slots != null) {
                 for (int i = 0; i < placedTowerTypes.length && i < slots.length(); i++)
@@ -1510,7 +1660,10 @@ public class GameState {
         }
         placedTowerTypes[0] = 1; towerLevels[0] = 1; movingTowerSlot = -1;
         doneResearch.clear(); activeResearchId = null; activeCraftId = null;
-        activeResearchLeft = 0; activeCraftLeft = 0;
+        activeResearchLeft = 0; activeCraftLeft = 0; labSlots = 1; scientistType = 0; sciencePoints = 0; bossSamples = 0;
+        experimentTimer = 0; experimentType = -1; scienceDoctrine = 0; prestigeScienceLevel = 0;
+        for (int i = 0; i < extraResearchIds.length; i++) { extraResearchIds[i] = null; extraResearchTimers[i] = 0; }
+        for (int i = 0; i < repeatableScience.length; i++) repeatableScience[i] = 0;
         gameOver = false;
         prefs.edit().clear().apply();
     }
@@ -1519,7 +1672,8 @@ public class GameState {
     public String researchStatus() {
         if (activeResearchId != null) {
             Defs.ResearchDef d = Defs.findResearch(activeResearchId);
-            return d.name + " (" + (int) Math.ceil(activeResearchLeft) + "с)";
+            return d.name + " (" + (int) Math.ceil(activeResearchLeft) + "с)"
+                    + (activeResearchCount() > 1 ? "  +" + (activeResearchCount() - 1) : "");
         }
         for (Defs.ResearchDef d : Defs.RESEARCH)
             if (!doneResearch.contains(d.id)) return d.name + " (доступно)";
