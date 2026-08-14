@@ -218,10 +218,14 @@ public class GameState {
     }
 
     private void spawnZombie() {
-        double sx = (Math.random() < 0.5 ? -14 : 14);
-        double sy = (Math.random() < 0.5 ? -14 : 14);
+        // Четыре видимых изометрических разлома по сторонам арены.
+        int side = (int) (Math.random() * 4);
+        double sx = side == 0 ? -7.2 : side == 2 ? 7.2 : 0;
+        double sy = side == 1 ? -7.2 : side == 3 ? 7.2 : 0;
+        sx += (Math.random() - .5) * .55;
+        sy += (Math.random() - .5) * .55;
         double hp = 10.0 * Math.pow(1.25, wave - 1);
-        zombies.add(new Zombie(sx, sy, hp, 2.2, 8.0));
+        zombies.add(new Zombie(sx, sy, hp, 1.45, 8.0));
     }
 
     private Zombie nearestZombie(double x, double y, double range) {

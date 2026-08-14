@@ -5,8 +5,9 @@
 
 ## Готовые APK
 
-- `releases/DeadRig-v0.1.0-debug.apk` — debug-сборка (подписана debug-ключом).
-- `releases/DeadRig-v0.1.0-release.apk` — release-сборка (подписана keystore, minSdk 21 / targetSdk 33).
+- `releases/DeadRig-v0.2.0-isometric-release.apk` — актуальная release-сборка с новым 2D-изометрическим рендером.
+- `releases/DeadRig-v0.2.0-isometric-debug.apk` — актуальная debug-сборка.
+- APK v0.1.0 оставлены как архив предыдущего визуального прототипа.
 
 Установка: разрешить установку из неизвестных источников → открыть APK.
 
@@ -34,4 +35,5 @@ APK: `app/build/outputs/apk/debug/app-debug.apk`
 ## Отличия от Unity-версии
 
 - Престиж не включён в демо (есть в Unity-ядре).
-- Арт — примитивы (круги/квадраты), в Unity — low-poly 3D.
+- Рендер — нативная качественная 2D-изометрия 2:1 на Android Canvas: тайловая арена, объёмные рисованные постройки, зомби, разломы, свет и VFX.
+- Unity для этой версии не используется.

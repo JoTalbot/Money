@@ -2,6 +2,8 @@ package com.deadrig.app;
 
 import android.app.Activity;
 import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -14,8 +16,13 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-/** Главный экран: игровое поле + HUD (валюты, кнопки, экран поражения). */
+/** Главный экран нативной Android-версии: изометрическое поле и мобильный HUD. */
 public class MainActivity extends Activity {
+
+    private static final int CYAN = Color.rgb(63, 232, 226);
+    private static final int ORANGE = Color.rgb(232, 126, 35);
+    private static final int TEXT = Color.rgb(225, 239, 238);
+    private static final int MUTED = Color.rgb(147, 177, 177);
 
     private GameState gs;
     private TextView lblHash, lblScrap, lblCrystal, lblWave, lblBase, lblResearch, lblCraft;
@@ -23,69 +30,104 @@ public class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     @Override
-    protected void onCreate(Bundle b) {
-        super.onCreate(b);
+    protected void onCreate(Bundle state) {
+        super.onCreate(state);
+        getWindow().setStatusBarColor(Color.rgb(5, 14, 17));
+        getWindow().setNavigationBarColor(Color.rgb(5, 14, 17));
         gs = new GameState(getSharedPreferences("deadrig", MODE_PRIVATE));
 
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.BLACK);
-
-        GameView gameView = new GameView(this, gs);
-        root.addView(gameView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-
-        // --- верхняя панель ---
-        LinearLayout top = new LinearLayout(this);
-        top.setOrientation(LinearLayout.VERTICAL);
-        top.setPadding(dp(12), dp(8), dp(12), dp(8));
-        top.setBackgroundColor(Color.argb(160, 0, 0, 0));
-        lblHash = tv(17, Color.rgb(255, 220, 120));
-        lblScrap = tv(13, Color.rgb(180, 220, 255));
-        lblCrystal = tv(13, Color.rgb(220, 180, 255));
-        lblWave = tv(16, Color.WHITE);
-        lblBase = tv(14, Color.rgb(255, 150, 150));
-        lblResearch = tv(12, Color.rgb(160, 255, 160));
-        lblCraft = tv(12, Color.rgb(160, 255, 160));
-        top.addView(lblHash); top.addView(lblScrap); top.addView(lblCrystal);
-        top.addView(lblWave); top.addView(lblBase); top.addView(lblResearch); top.addView(lblCraft);
-        root.addView(top, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP));
-
-        // --- нижняя панель кнопок ---
-        LinearLayout bottom = new LinearLayout(this);
-        bottom.setOrientation(LinearLayout.HORIZONTAL);
-        bottom.setPadding(dp(6), dp(8), dp(6), dp(12));
-        bottom.setBackgroundColor(Color.argb(160, 0, 0, 0));
-        bottom.addView(btn("Ферма", v -> act(gs.tryUpgradeMiner())));
-        bottom.addView(btn("Турель", v -> act(gs.tryUpgradeTurret())));
-        bottom.addView(btn("Наука", v -> act(gs.tryStartResearch())));
-        bottom.addView(btn("Крафт", v -> act(gs.tryStartCraft())));
-        bottom.addView(btn("Волна", v -> act(gs.tryStartWave())));
-        root.addView(bottom, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
-
-        // --- экран поражения ---
-        LinearLayout over = new LinearLayout(this);
-        over.setOrientation(LinearLayout.VERTICAL);
-        over.setGravity(Gravity.CENTER);
-        over.setBackgroundColor(Color.argb(210, 0, 0, 0));
-        TextView overText = tv(26, Color.rgb(255, 90, 90));
-        overText.setText("БАЗА УНИЧТОЖЕНА");
-        over.addView(overText);
-        Button restart = new Button(this);
-        restart.setText("Заново");
-        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(dp(220), dp(90));
-        rp.topMargin = dp(24);
-        restart.setLayoutParams(rp);
-        restart.setOnClickListener(v -> { gs.reset(); gameOverPanel.setVisibility(ViewGroup.GONE); });
-        over.addView(restart);
-        gameOverPanel = over;
-        gameOverPanel.setVisibility(ViewGroup.GONE);
-        root.addView(over, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        root.setBackgroundColor(Color.rgb(5, 14, 17));
+        root.addView(new GameView(this, gs), new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        root.addView(buildTopPanel(), new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP));
+        root.addView(buildBottomPanel(), new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
+        root.addView(buildGameOver(), new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         setContentView(root);
         startHudLoop();
     }
 
-    private void act(String msg) {
-        if (msg != null) Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+    private View buildTopPanel() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(14), dp(9), dp(14), dp(10));
+        panel.setBackground(panelBackground(238, false));
+
+        TextView title = tv(11, CYAN, Gravity.CENTER);
+        title.setText("DEADRIG  //  УЗЕЛ 07");
+        title.setLetterSpacing(.16f);
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        panel.addView(title, matchWrap());
+
+        LinearLayout resources = row();
+        lblHash = tv(15, Color.rgb(255, 193, 91), Gravity.START);
+        lblScrap = tv(13, Color.rgb(154, 218, 224), Gravity.CENTER);
+        lblCrystal = tv(13, Color.rgb(197, 171, 255), Gravity.END);
+        resources.addView(lblHash, weighted()); resources.addView(lblScrap, weighted()); resources.addView(lblCrystal, weighted());
+        panel.addView(resources, matchWrap());
+
+        LinearLayout combat = row();
+        lblWave = tv(14, TEXT, Gravity.START);
+        lblBase = tv(14, CYAN, Gravity.END);
+        combat.addView(lblWave, weighted()); combat.addView(lblBase, weighted());
+        panel.addView(combat, matchWrap());
+
+        LinearLayout progress = row();
+        lblResearch = tv(11, MUTED, Gravity.START);
+        lblCraft = tv(11, MUTED, Gravity.END);
+        progress.addView(lblResearch, weighted()); progress.addView(lblCraft, weighted());
+        panel.addView(progress, matchWrap());
+        return panel;
+    }
+
+    private View buildBottomPanel() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.HORIZONTAL);
+        panel.setGravity(Gravity.CENTER);
+        panel.setPadding(dp(7), dp(8), dp(7), dp(11));
+        panel.setBackground(panelBackground(242, true));
+        panel.addView(button("Ферма", false, v -> act(gs.tryUpgradeMiner())));
+        panel.addView(button("Оборона", false, v -> act(gs.tryUpgradeTurret())));
+        panel.addView(button("Наука", false, v -> act(gs.tryStartResearch())));
+        panel.addView(button("Цех", false, v -> act(gs.tryStartCraft())));
+        panel.addView(button("Волна", true, v -> act(gs.tryStartWave())));
+        return panel;
+    }
+
+    private View buildGameOver() {
+        LinearLayout over = new LinearLayout(this);
+        over.setOrientation(LinearLayout.VERTICAL);
+        over.setGravity(Gravity.CENTER);
+        over.setPadding(dp(24), dp(24), dp(24), dp(24));
+        over.setBackgroundColor(Color.argb(238, 3, 9, 11));
+
+        TextView code = tv(11, ORANGE, Gravity.CENTER);
+        code.setLetterSpacing(.2f); code.setText("КРИТИЧЕСКАЯ ОШИБКА");
+        over.addView(code);
+        TextView title = tv(27, Color.rgb(255, 75, 79), Gravity.CENTER);
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD); title.setText("БАЗА УНИЧТОЖЕНА");
+        LinearLayout.LayoutParams titleParams = matchWrap(); titleParams.topMargin = dp(8); over.addView(title, titleParams);
+        TextView hint = tv(13, MUTED, Gravity.CENTER);
+        hint.setText("Перезапустите узел и укрепите оборонный контур");
+        LinearLayout.LayoutParams hintParams = matchWrap(); hintParams.topMargin = dp(10); over.addView(hint, hintParams);
+
+        Button restart = button("ПЕРЕЗАПУСТИТЬ", true, v -> {
+            gs.reset();
+            gameOverPanel.setVisibility(ViewGroup.GONE);
+        });
+        LinearLayout.LayoutParams restartParams = new LinearLayout.LayoutParams(dp(230), dp(58));
+        restartParams.topMargin = dp(26); restart.setLayoutParams(restartParams); over.addView(restart);
+        gameOverPanel = over;
+        gameOverPanel.setVisibility(ViewGroup.GONE);
+        return over;
+    }
+
+    private void act(String message) {
+        if (message != null) Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
     }
 
     private void startHudLoop() {
@@ -93,53 +135,75 @@ public class MainActivity extends Activity {
             @Override public void run() {
                 refreshHud();
                 if (gs.gameOver) gameOverPanel.setVisibility(ViewGroup.VISIBLE);
-                handler.postDelayed(this, 250);
+                handler.postDelayed(this, 200);
             }
-        }, 250);
+        }, 100);
     }
 
     private void refreshHud() {
-        lblHash.setText("Хеши: " + GameState.fmt(gs.hashes));
-        lblScrap.setText("Лом: " + GameState.fmt(gs.scrap));
-        lblCrystal.setText("Кристаллы: " + gs.crystals);
-        lblWave.setText("Волна: " + gs.wave + (gs.waveActive ? " (зомби идут)" : ""));
-        lblBase.setText("База: " + (int) Math.ceil(gs.baseHp) + "/" + (int) gs.baseMaxHp + "  Турели: " + gs.turretCount());
-        lblResearch.setText("Наука: " + gs.researchStatus());
-        lblCraft.setText("Мастерская: " + gs.craftStatus());
+        lblHash.setText("ХЕШИ  " + GameState.fmt(gs.hashes));
+        lblScrap.setText("ЛОМ  " + GameState.fmt(gs.scrap));
+        lblCrystal.setText("КРИСТ.  " + gs.crystals);
+        lblWave.setText("ВОЛНА  " + gs.wave + (gs.waveActive ? "  // АТАКА" : ""));
+        lblBase.setText("БАЗА  " + (int) Math.ceil(gs.baseHp) + "/" + (int) gs.baseMaxHp);
+        lblBase.setTextColor(gs.baseHp <= gs.baseMaxHp * .3 ? Color.rgb(255, 74, 78) : CYAN);
+        lblResearch.setText("НАУКА  " + gs.researchStatus());
+        lblCraft.setText("ЦЕХ  " + gs.craftStatus());
     }
 
-    private TextView tv(int size, int color) {
-        TextView t = new TextView(this);
-        t.setTextSize(size);
-        t.setTextColor(color);
-        t.setGravity(Gravity.START);
-        return t;
+    private LinearLayout row() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams params = matchWrap(); params.topMargin = dp(4); row.setLayoutParams(params);
+        return row;
     }
 
-    private Button btn(String label, android.view.View.OnClickListener l) {
-        Button b = new Button(this);
-        b.setText(label);
-        b.setTextSize(13);
-        b.setOnClickListener(l);
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        p.setMargins(dp(3), 0, dp(3), 0);
-        b.setLayoutParams(p);
-        return b;
+    private TextView tv(int size, int color, int gravity) {
+        TextView text = new TextView(this);
+        text.setTextSize(size); text.setTextColor(color); text.setGravity(gravity);
+        text.setSingleLine(true); text.setIncludeFontPadding(false);
+        return text;
     }
 
-    private int dp(int v) {
-        return (int) (v * getResources().getDisplayMetrics().density);
+    private Button button(String label, boolean accent, View.OnClickListener listener) {
+        Button button = new Button(this);
+        button.setText(label); button.setTextSize(11); button.setTextColor(Color.WHITE);
+        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD); button.setAllCaps(false);
+        button.setPadding(dp(2), 0, dp(2), 0); button.setMinWidth(0); button.setMinimumWidth(0);
+        button.setMinHeight(0); button.setMinimumHeight(0); button.setOnClickListener(listener);
+        GradientDrawable bg = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                accent ? new int[]{Color.rgb(235, 132, 42), Color.rgb(181, 76, 25)}
+                        : new int[]{Color.rgb(27, 79, 82), Color.rgb(15, 48, 53)});
+        bg.setCornerRadius(dp(7)); bg.setStroke(dp(1), accent ? Color.rgb(255, 179, 77) : Color.rgb(44, 137, 137));
+        button.setBackground(bg);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(53), 1f);
+        params.setMargins(dp(3), 0, dp(3), 0); button.setLayoutParams(params);
+        return button;
     }
 
-    @Override
-    protected void onPause() {
-        super.onPause();
-        gs.save();
+    private GradientDrawable panelBackground(int alpha, boolean topCorners) {
+        GradientDrawable bg = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(alpha, 7, 24, 28), Color.argb(alpha, 4, 15, 19)});
+        bg.setStroke(dp(1), Color.argb(170, 35, 101, 103));
+        return bg;
     }
 
-    @Override
-    protected void onStop() {
-        super.onStop();
-        gs.save();
+    private LinearLayout.LayoutParams weighted() {
+        return new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
     }
+
+    private LinearLayout.LayoutParams matchWrap() {
+        return new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+    }
+
+    private int dp(int value) {
+        return (int) (value * getResources().getDisplayMetrics().density + .5f);
+    }
+
+    @Override protected void onPause() { super.onPause(); gs.save(); }
+    @Override protected void onStop() { super.onStop(); gs.save(); }
+    @Override protected void onDestroy() { handler.removeCallbacksAndMessages(null); super.onDestroy(); }
 }
