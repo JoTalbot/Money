@@ -1,0 +1,48 @@
+# Secrets
+.env
+.env.*
+*.key
+*.pem
+*.keystore
+*.jks
+credentials*
+secrets*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+
+# Android / Gradle
+.gradle/
+build/
+app/build/
+local.properties
+captures/
+*.apk
+*.aab
+
+# Unity
+Library/
+Temp/
+Obj/
+Logs/
+UserSettings/
+*.csproj
+*.sln
+
+# Godot
+.godot/
+*.tmp
+
+# Node / misc
+node_modules/
+dist/
+out/
+__pycache__/
+*.pyc
+.cache/
