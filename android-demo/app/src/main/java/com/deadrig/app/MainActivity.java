@@ -94,10 +94,10 @@ public class MainActivity extends Activity {
         panel.setClickable(true);
         panel.setFocusable(true);
         panel.setElevation(dp(16));
-        panel.addView(button("Ферма", false, v -> act(gs.tryUpgradeMiner())));
-        panel.addView(button("Оборона", false, v -> act(gs.tryUpgradeTurret())));
-        panel.addView(button("Наука", false, v -> act(gs.tryStartResearch())));
-        panel.addView(button("Цех", false, v -> act(gs.tryStartCraft())));
+        panel.addView(button("Ферма", false, v -> ControlPanel.showFarm(this, gs, this::refreshHud)));
+        panel.addView(button("Оборона", false, v -> ControlPanel.showDefense(this, gs, this::refreshHud)));
+        panel.addView(button("Наука", false, v -> ControlPanel.showResearch(this, gs, this::refreshHud)));
+        panel.addView(button("Цех", false, v -> ControlPanel.showWorkshop(this, gs, this::refreshHud)));
         panel.addView(button("Волна", true, v -> act(gs.tryStartWave())));
         return panel;
     }

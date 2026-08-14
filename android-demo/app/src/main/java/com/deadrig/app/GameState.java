@@ -68,6 +68,12 @@ public class GameState {
     public String activeCraftId = null;
     private double activeCraftLeft = 0;
 
+    public double activeResearchSeconds() { return Math.max(0, activeResearchLeft); }
+    public double activeCraftSeconds() { return Math.max(0, activeCraftLeft); }
+    public double turretDamageBonus() { return turretMult; }
+    public double turretFireRateBonus() { return fireRateMult; }
+    public double turretRangeBonus() { return rangeBonus; }
+
     public boolean gameOver = false;
 
     private static final double OFFLINE_CAP = 8 * 3600.0;
@@ -139,19 +145,25 @@ public class GameState {
     }
 
     public String tryStartResearch() {
-        if (activeResearchId != null) return "Исследование уже идёт";
-        boolean any = false;
-        for (Defs.ResearchDef d : Defs.RESEARCH) {
-            if (doneResearch.contains(d.id)) continue;
-            any = true;
-            if (d.requiresId != null && !doneResearch.contains(d.requiresId)) continue;
-            if (hashes < d.costHashes || scrap < d.costScrap) continue;
-            hashes -= d.costHashes; scrap -= d.costScrap;
-            activeResearchId = d.id; activeResearchLeft = d.durationSec;
-            return "Начато: " + d.name;
-        }
-        if (any) return "Не хватает ресурсов";
+        for (Defs.ResearchDef def : Defs.RESEARCH)
+            if (!doneResearch.contains(def.id) && (def.requiresId == null || doneResearch.contains(def.requiresId)))
+                return tryStartResearch(def.id);
         return "Всё изучено";
+    }
+
+    /** Запускает выбранный игроком проект из экрана науки. */
+    public String tryStartResearch(String id) {
+        if (activeResearchId != null) return "Исследование уже идёт";
+        Defs.ResearchDef def = Defs.findResearch(id);
+        if (def == null) return "Проект не найден";
+        if (doneResearch.contains(id)) return "Уже изучено";
+        if (def.requiresId != null && !doneResearch.contains(def.requiresId))
+            return "Сначала изучите: " + Defs.findResearch(def.requiresId).name;
+        if (hashes < def.costHashes || scrap < def.costScrap)
+            return "Нужно " + fmt(def.costHashes) + " хешей и " + fmt(def.costScrap) + " лома";
+        hashes -= def.costHashes; scrap -= def.costScrap;
+        activeResearchId = def.id; activeResearchLeft = def.durationSec;
+        return "Начато: " + def.name;
     }
 
     public String tryStartCraft() {
@@ -183,6 +195,25 @@ public class GameState {
         if (pendingTowerCount() > 0) return "Установите башню из резерва на площадку";
         if (anyUnlocked) return "Не хватает ресурсов";
         return "Нет рецептов";
+    }
+
+    /** Запускает выбранный игроком рецепт из экрана цеха. */
+    public String tryStartCraft(String id) {
+        if (activeCraftId != null) return "Производство уже идёт";
+        Defs.RecipeDef recipe = Defs.findRecipe(id);
+        if (recipe == null) return "Рецепт не найден";
+        if (!isUnlocked(recipe)) {
+            Defs.ResearchDef required = Defs.findResearch(recipe.requiresResearchId);
+            return "Нужно исследование: " + (required != null ? required.name : recipe.requiresResearchId);
+        }
+        boolean tower = recipe.outItem.startsWith("turret_") && !recipe.outItem.equals("turret_module");
+        if (tower && pendingTowerCount() > 0) return "Сначала установите башню из резерва";
+        if (tower && placedTowerCount() >= TOWER_SLOTS.length) return "Все площадки заняты";
+        if (hashes < recipe.costHashes || scrap < recipe.costScrap)
+            return "Нужно " + fmt(recipe.costHashes) + " хешей и " + fmt(recipe.costScrap) + " лома";
+        hashes -= recipe.costHashes; scrap -= recipe.costScrap;
+        activeCraftId = recipe.id; activeCraftLeft = recipe.durationSec;
+        return "Производство: " + recipe.name;
     }
 
     public boolean isUnlocked(Defs.RecipeDef r) {
