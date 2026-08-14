@@ -48,6 +48,12 @@
   - `android-demo/releases/DeadRig-v0.5.0-manual-combat-release.apk`
   - `android-demo/releases/DeadRig-v0.5.0-manual-combat-debug.apk`
 
+## Программа 100 улучшений
+
+- Утверждена реализация пунктов 1–100 батчами и параллельными потоками.
+- Полный трекер: `docs/roadmap-100.md`.
+- Текущий батч: **1 — ручной бой (COM-01—COM-10)**.
+
 ## Что НЕ доделано
 
 - [ ] Проверка удобства tap/hold на реальном телефоне и настройка размеров hitbox.
