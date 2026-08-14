@@ -47,6 +47,16 @@ public class Defs {
         r = new ResearchDef(); r.id = "r_module"; r.name = "Модульная оборона"; r.desc = "Открывает крафт комплекта усиления";
         r.requiresId = "r_dmg"; r.costHashes = 380; r.costScrap = 100; r.durationSec = 260; r.effectType = -1; RESEARCH.add(r);
 
+        // Отдельная ветка ручного оружия оператора.
+        r = new ResearchDef(); r.id = "r_weapon_auto"; r.name = "Автомат оператора"; r.desc = "Открывает автоматический огонь";
+        r.costHashes = 90; r.costScrap = 25; r.durationSec = 75; r.effectType = -1; RESEARCH.add(r);
+
+        r = new ResearchDef(); r.id = "r_weapon_shotgun"; r.name = "Штурмовой дробовик"; r.desc = "Открывает урон по группе";
+        r.requiresId = "r_weapon_auto"; r.costHashes = 220; r.costScrap = 70; r.durationSec = 170; r.effectType = -1; RESEARCH.add(r);
+
+        r = new ResearchDef(); r.id = "r_weapon_rail"; r.name = "Переносной рельсотрон"; r.desc = "Открывает бронебойный сверхвыстрел";
+        r.requiresId = "r_weapon_shotgun"; r.costHashes = 520; r.costScrap = 160; r.durationSec = 360; r.effectType = -1; RESEARCH.add(r);
+
         RecipeDef c;
         c = new RecipeDef(); c.id = "turret_basic"; c.name = "Базовая турель"; c.outItem = "turret_basic";
         c.costHashes = 30; c.costScrap = 10; c.durationSec = 20; RECIPES.add(c);
@@ -62,6 +72,15 @@ public class Defs {
 
         c = new RecipeDef(); c.id = "turret_module"; c.name = "Комплект усиления"; c.outItem = "turret_module";
         c.requiresResearchId = "r_module"; c.costHashes = 180; c.costScrap = 75; c.durationSec = 100; RECIPES.add(c);
+
+        c = new RecipeDef(); c.id = "weapon_auto"; c.name = "Автомат оператора"; c.outItem = "weapon_auto";
+        c.requiresResearchId = "r_weapon_auto"; c.costHashes = 80; c.costScrap = 30; c.durationSec = 45; RECIPES.add(c);
+
+        c = new RecipeDef(); c.id = "weapon_shotgun"; c.name = "Штурмовой дробовик"; c.outItem = "weapon_shotgun";
+        c.requiresResearchId = "r_weapon_shotgun"; c.costHashes = 190; c.costScrap = 75; c.durationSec = 100; RECIPES.add(c);
+
+        c = new RecipeDef(); c.id = "weapon_rail"; c.name = "Переносной рельсотрон"; c.outItem = "weapon_rail";
+        c.requiresResearchId = "r_weapon_rail"; c.costHashes = 480; c.costScrap = 180; c.durationSec = 220; RECIPES.add(c);
     }
 
     public static ResearchDef findResearch(String id) {

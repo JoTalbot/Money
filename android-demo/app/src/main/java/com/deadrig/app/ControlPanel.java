@@ -38,11 +38,12 @@ public final class ControlPanel {
     public static void showTutorial(Activity activity, OnChanged completed) {
         Dialog dialog = create(activity, "ДОБРО ПОЖАЛОВАТЬ В DEADRIG", "Краткий инструктаж оператора");
         LinearLayout list = content(dialog);
-        addCard(activity, list, "1. Защищайте ядро", "Зомби идут по четырём дорогам. Башни стреляют автоматически, но маршрут и состав обороны выбираете вы.", null, false, null);
-        addCard(activity, list, "2. Развивайте экономику", "Ферма добывает хеши. За очищенные волны выдаётся лом — главный материал науки и производства.", null, false, null);
-        addCard(activity, list, "3. Исследуйте и создавайте", "Откройте экран Науки, выберите технологию, затем создайте конкретную башню в Цехе.", null, false, null);
-        addCard(activity, list, "4. Устанавливайте башни", "Готовая башня попадает в резерв. Закройте меню и нажмите на светящуюся площадку рядом с дорогой.", null, false, null);
-        addCard(activity, list, "5. Управляйте каждой башней", "Нажмите на установленную башню: её можно улучшить, переместить или продать.", "НАЧАТЬ ЗАЩИТУ", true, v -> {
+        addCard(activity, list, "1. Стреляйте сами", "Нажмите на зомби для усиленного одиночного выстрела. Удерживайте палец на враге для автоматического огня.", null, false, null);
+        addCard(activity, list, "2. Защищайте ядро", "Зомби идут по четырём дорогам. Башни стреляют автоматически, но маршрут и состав обороны выбираете вы.", null, false, null);
+        addCard(activity, list, "3. Развивайте экономику", "Ферма добывает хеши. За очищенные волны выдаётся лом — главный материал науки и производства.", null, false, null);
+        addCard(activity, list, "4. Исследуйте и создавайте", "Откройте экран Науки, выберите технологию, затем создайте конкретную башню в Цехе.", null, false, null);
+        addCard(activity, list, "5. Устанавливайте башни", "Готовая башня попадает в резерв. Закройте меню и нажмите на светящуюся площадку рядом с дорогой.", null, false, null);
+        addCard(activity, list, "6. Управляйте каждой башней", "Нажмите на установленную башню: её можно улучшить, переместить или продать.", "НАЧАТЬ ЗАЩИТУ", true, v -> {
             feedback(); completed.run(); dialog.dismiss();
         });
         dialog.setCancelable(false);
@@ -68,6 +69,11 @@ public final class ControlPanel {
         addMetric(activity, list, "УСТАНОВЛЕНО / РЕЗЕРВ", state.turretCount() + " / " + state.pendingTowerCount());
         addMetric(activity, list, "БОНУСЫ", "+" + percent(state.turretDamageBonus()) + " урон  •  +"
                 + percent(state.turretFireRateBonus()) + " темп  •  +" + String.format(Locale.US, "%.1f", state.turretRangeBonus()) + " дальность");
+        addMetric(activity, list, "РУЧНОЕ ОРУЖИЕ", state.manualWeaponName() + "  ур." + state.manualWeaponLevel()
+                + "  •  " + GameState.fmt(state.manualWeaponDamage()) + " урона");
+        addCard(activity, list, "Улучшить ручное оружие",
+                "Повышает урон выстрелов игрока на 35%.\nСтоимость: " + GameState.fmt(state.manualUpgradeCost()) + " хешей",
+                "УЛУЧШИТЬ ОРУЖИЕ", true, v -> result(activity, state.tryUpgradeManualWeapon(), changed, dialog));
         addCard(activity, list, "Усилить все башни",
                 "Повышает базовый урон всего оборонного контура.\nСтоимость: " + GameState.fmt(state.turretUpgradeCost()) + " хешей",
                 "УСИЛИТЬ", true, v -> result(activity, state.tryUpgradeTurret(), changed, dialog));
@@ -158,6 +164,9 @@ public final class ControlPanel {
         if ("turret_tesla".equals(item)) return "Тяжёлый энергетический разряд";
         if ("turret_module".equals(item)) return "+1 к общему уровню всех башен";
         if ("wall".equals(item)) return "+20 к максимальному HP базы и ремонт";
+        if ("weapon_auto".equals(item)) return "Высокий темп ручного огня при удержании";
+        if ("weapon_shotgun".equals(item)) return "Дробь наносит урон группе зомби";
+        if ("weapon_rail".equals(item)) return "Мощный бронебойный выстрел";
         return "Производственный проект";
     }
 

@@ -20,6 +20,11 @@ public class GameState {
     public int minerLevel = 1;
     public int turretLevel = 1;
 
+    // --- ручное оружие оператора ---
+    private int manualWeaponType = 0; // 0 пистолет, 1 автомат, 2 дробовик, 3 рельсотрон
+    private int manualWeaponLevel = 1;
+    private double manualCooldown = 0;
+
     // --- бонусы исследований ---
     public double miningMult = 0;
     public double turretMult = 0;
@@ -96,6 +101,17 @@ public class GameState {
     public double miningRate() { return 1.0 * minerLevel * (1 + miningMult); }
     public double minerUpgradeCost() { return 10.0 * Math.pow(1.5, minerLevel - 1); }
     public double turretUpgradeCost() { return 15.0 * Math.pow(1.6, turretLevel - 1); }
+    public int manualWeaponType() { return manualWeaponType; }
+    public int manualWeaponLevel() { return manualWeaponLevel; }
+    public String manualWeaponName() {
+        return manualWeaponType == 3 ? "Рельсотрон" : manualWeaponType == 2 ? "Дробовик"
+                : manualWeaponType == 1 ? "Автомат" : "Пистолет";
+    }
+    public double manualWeaponDamage() {
+        double base = manualWeaponType == 3 ? 65 : manualWeaponType == 2 ? 24 : manualWeaponType == 1 ? 9 : 14;
+        return base * (1 + (manualWeaponLevel - 1) * .35);
+    }
+    public double manualUpgradeCost() { return 20.0 * Math.pow(1.7, manualWeaponLevel - 1); }
     public int turretCount() { return placedTowerCount(); }
     public int pendingTowerCount() {
         return Math.max(0, 1 + basicTurrets + laserTurrets + teslaTurrets - placedTowerCount());
@@ -152,6 +168,26 @@ public class GameState {
         towerLevels[slot] = towerLevelAt(slot) + 1;
         syncTurrets();
         return "Башня улучшена до уровня " + towerLevels[slot];
+    }
+
+    public String tryUpgradeManualWeapon() {
+        double cost = manualUpgradeCost();
+        if (hashes < cost) return "Нужно " + fmt(cost) + " хешей";
+        hashes -= cost;
+        manualWeaponLevel++;
+        return manualWeaponName() + " улучшен до уровня " + manualWeaponLevel;
+    }
+
+    /** Ручной выстрел: charged=true для усиленного короткого нажатия. */
+    public boolean manualShoot(Zombie target, boolean charged) {
+        if (target == null || !zombies.contains(target) || manualCooldown > 0 || gameOver) return false;
+        double damage = manualWeaponDamage() * (charged ? 1.65 : 1.0);
+        double interval = manualWeaponType == 3 ? .90 : manualWeaponType == 2 ? .62
+                : manualWeaponType == 1 ? .11 : .32;
+        manualCooldown = interval * (charged ? 1.12 : 1.0);
+        projectiles.add(new Projectile(0, 0, target, damage,
+                manualWeaponType == 3 ? 30 : 18, 10 + manualWeaponType));
+        return true;
     }
 
     public String beginMoveTower(int slot) {
@@ -267,6 +303,9 @@ public class GameState {
             return "Нужно исследование: " + (required != null ? required.name : recipe.requiresResearchId);
         }
         boolean tower = recipe.outItem.startsWith("turret_") && !recipe.outItem.equals("turret_module");
+        int weaponTier = recipe.outItem.equals("weapon_rail") ? 3 : recipe.outItem.equals("weapon_shotgun") ? 2
+                : recipe.outItem.equals("weapon_auto") ? 1 : 0;
+        if (weaponTier > 0 && manualWeaponType >= weaponTier) return "Это оружие уже создано";
         if (tower && pendingTowerCount() > 0) return "Сначала установите башню из резерва";
         if (tower && placedTowerCount() >= TOWER_SLOTS.length) return "Все площадки заняты";
         if (hashes < recipe.costHashes || scrap < recipe.costScrap)
@@ -283,6 +322,7 @@ public class GameState {
     // ===== главный тик =====
     public void update(double dt) {
         if (gameOver) return;
+        manualCooldown = Math.max(0, manualCooldown - dt);
         hashes += miningRate() * dt;
 
         // Движение по маршрутам tower defense и урон базе в конечной точке.
@@ -357,15 +397,23 @@ public class GameState {
                 if (p.target.type == 1 && p.type == 2) resistance = 1.20; // лазер эффективен против бегунов
                 if (p.target.type == 3 && p.type == 3) resistance = .80; // токсичная плоть гасит разряд
                 if (p.target.type == 4 && p.type == 3) resistance = 1.15;
+                if (p.target.type == 2 && (p.type == 10 || p.type == 11)) resistance = .65;
+                if (p.target.type == 2 && p.type == 13) resistance = 1.55; // рельсотрон пробивает броню
                 p.target.hp -= p.damage * resistance;
+                if (p.type == 12) { // дробовик задевает группу вокруг цели
+                    for (Zombie other : zombies)
+                        if (other != p.target && Math.hypot(other.x - p.target.x, other.y - p.target.y) < 1.25)
+                            other.hp -= p.damage * .42;
+                }
                 hitEffects.add(new HitEffect(p.x, p.y, p.type));
                 projectiles.remove(i);
-                if (p.target.hp <= 0) zombies.remove(p.target);
                 continue;
             }
             p.x += dx / d * p.speed * dt;
             p.y += dy / d * p.speed * dt;
         }
+        for (int i = zombies.size() - 1; i >= 0; i--)
+            if (zombies.get(i).hp <= 0) zombies.remove(i);
 
         for (int i = hitEffects.size() - 1; i >= 0; i--) {
             HitEffect effect = hitEffects.get(i);
@@ -461,6 +509,9 @@ public class GameState {
             else if (r.outItem.equals("turret_laser")) laserTurrets++;
             else if (r.outItem.equals("turret_tesla")) teslaTurrets++;
             else if (r.outItem.equals("turret_module")) turretLevel++;
+            else if (r.outItem.equals("weapon_auto")) manualWeaponType = Math.max(manualWeaponType, 1);
+            else if (r.outItem.equals("weapon_shotgun")) manualWeaponType = Math.max(manualWeaponType, 2);
+            else if (r.outItem.equals("weapon_rail")) manualWeaponType = Math.max(manualWeaponType, 3);
             else if (r.outItem.equals("wall")) {
                 baseMaxHp += 20;
                 baseHp = Math.min(baseMaxHp, baseHp + 20);
@@ -478,6 +529,8 @@ public class GameState {
             o.put("crystals", crystals);
             o.put("minerLevel", minerLevel);
             o.put("turretLevel", turretLevel);
+            o.put("manualWeaponType", manualWeaponType);
+            o.put("manualWeaponLevel", manualWeaponLevel);
             o.put("miningMult", miningMult);
             o.put("turretMult", turretMult);
             o.put("scrapMult", scrapMult);
@@ -513,6 +566,8 @@ public class GameState {
             crystals = o.getLong("crystals");
             minerLevel = o.getInt("minerLevel");
             turretLevel = o.getInt("turretLevel");
+            manualWeaponType = o.optInt("manualWeaponType", 0);
+            manualWeaponLevel = Math.max(1, o.optInt("manualWeaponLevel", 1));
             miningMult = o.optDouble("miningMult", 0);
             turretMult = o.optDouble("turretMult", 0);
             scrapMult = o.optDouble("scrapMult", 0);
@@ -552,6 +607,7 @@ public class GameState {
 
     public void reset() {
         hashes = 0; scrap = 0; crystals = 0; minerLevel = 1; turretLevel = 1;
+        manualWeaponType = 0; manualWeaponLevel = 1; manualCooldown = 0;
         miningMult = 0; turretMult = 0; scrapMult = 0;
         baseHp = 100; baseMaxHp = 100;
         wave = 0; waveActive = false; zombiesToSpawn = 0; spawnTimer = 0; nextWaveTimer = 2.0;

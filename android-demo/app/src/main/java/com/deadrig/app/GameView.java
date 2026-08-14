@@ -47,6 +47,9 @@ public class GameView extends View {
     private float unit;
     private float cx;
     private float cy;
+    private GameState.Zombie heldTarget;
+    private long touchDownAt;
+    private boolean aimingAtEnemy;
 
     public GameView(Context ctx, GameState gs, SlotListener slotListener) {
         super(ctx);
@@ -66,6 +69,11 @@ public class GameView extends View {
         double dt = Math.min(0.05, (now - lastTime) / 1000.0);
         lastTime = now;
         if (dt > 0) gs.update(dt);
+        if (aimingAtEnemy && heldTarget != null && now - touchDownAt >= 180) {
+            if (!gs.zombies.contains(heldTarget)) heldTarget = null;
+            else if (gs.manualShoot(heldTarget, false))
+                performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
+        }
 
         int w = getWidth(), h = getHeight();
         unit = Math.min(w / 18f, h / 30f);
@@ -189,7 +197,31 @@ public class GameView extends View {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        if (event.getAction() == MotionEvent.ACTION_DOWN) {
+            heldTarget = touchedZombie(event.getX(), event.getY());
+            aimingAtEnemy = heldTarget != null;
+            touchDownAt = System.currentTimeMillis();
+            return true;
+        }
+        if (event.getAction() == MotionEvent.ACTION_MOVE && aimingAtEnemy) {
+            GameState.Zombie movedTarget = touchedZombie(event.getX(), event.getY());
+            if (movedTarget != null) heldTarget = movedTarget;
+            return true;
+        }
+        if (event.getAction() == MotionEvent.ACTION_CANCEL) {
+            aimingAtEnemy = false; heldTarget = null; return true;
+        }
         if (event.getAction() != MotionEvent.ACTION_UP) return true;
+
+        if (aimingAtEnemy) {
+            boolean shortTap = System.currentTimeMillis() - touchDownAt < 220;
+            if (heldTarget != null && gs.manualShoot(heldTarget, shortTap))
+                performHapticFeedback(shortTap ? android.view.HapticFeedbackConstants.LONG_PRESS
+                        : android.view.HapticFeedbackConstants.VIRTUAL_KEY);
+            aimingAtEnemy = false; heldTarget = null;
+            return true;
+        }
+
         int best = -1;
         float bestDistance = unit * .82f;
         for (int i = 0; i < GameState.TOWER_SLOTS.length; i++) {
@@ -199,15 +231,26 @@ public class GameView extends View {
         }
         if (best >= 0) {
             performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY);
-            if (gs.towerTypeAt(best) != 0 && slotListener != null) {
-                slotListener.onOccupiedSlot(best);
-            } else {
+            if (gs.towerTypeAt(best) != 0 && slotListener != null) slotListener.onOccupiedSlot(best);
+            else {
                 String message = gs.tryPlaceTower(best);
                 Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
                 invalidate();
             }
         }
         return true;
+    }
+
+    private GameState.Zombie touchedZombie(float x, float y) {
+        GameState.Zombie best = null;
+        float bestDistance = unit * 1.05f;
+        for (GameState.Zombie zombie : gs.zombies) {
+            PointF p = iso(zombie.x, zombie.y);
+            float vertical = zombie.type == 4 ? unit * .9f : unit * .45f;
+            float distance = (float) Math.hypot(x - p.x, y - (p.y - vertical));
+            if (distance < bestDistance) { bestDistance = distance; best = zombie; }
+        }
+        return best;
     }
 
     private void drawSpawnRifts(Canvas c) {
@@ -365,8 +408,10 @@ public class GameView extends View {
     private void drawProjectiles(Canvas c) {
         for (GameState.Projectile p : gs.projectiles) {
             PointF q = iso(p.x, p.y);
-            float r = unit * (p.type == 3 ? .18f : .13f);
-            int glow = p.type == 3 ? Color.rgb(212, 104, 255) : p.type == 2 ? CYAN : ORANGE;
+            float r = unit * (p.type == 3 || p.type == 13 ? .18f : .13f);
+            int glow = p.type == 13 ? Color.rgb(220, 246, 255) : p.type == 12 ? Color.rgb(160, 255, 104)
+                    : p.type == 11 ? Color.rgb(255, 187, 65) : p.type == 10 ? Color.rgb(255, 231, 118)
+                    : p.type == 3 ? Color.rgb(212, 104, 255) : p.type == 2 ? CYAN : ORANGE;
             paint.setShader(new RadialGradient(q.x, q.y - unit * .18f, r * 3f,
                     glow, Color.TRANSPARENT, Shader.TileMode.CLAMP));
             c.drawCircle(q.x, q.y - unit * .18f, r * 3f, paint); paint.setShader(null);
@@ -379,7 +424,9 @@ public class GameView extends View {
             PointF p = iso(effect.x, effect.y);
             float progress = (float) (effect.life / .28);
             float radius = unit * (.18f + (1f - progress) * .55f);
-            int color = effect.type == 3 ? Color.rgb(211, 104, 255) : effect.type == 2 ? CYAN : ORANGE;
+            int color = effect.type == 13 ? Color.WHITE : effect.type == 12 ? Color.rgb(160, 255, 104)
+                    : effect.type >= 10 ? Color.rgb(255, 205, 83)
+                    : effect.type == 3 ? Color.rgb(211, 104, 255) : effect.type == 2 ? CYAN : ORANGE;
             stroke.setColor(Color.argb((int) (220 * progress), Color.red(color), Color.green(color), Color.blue(color)));
             stroke.setStrokeWidth(unit * .07f * progress);
             c.drawCircle(p.x, p.y - unit * .25f, radius, stroke);

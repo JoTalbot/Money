@@ -28,7 +28,7 @@ public class MainActivity extends Activity {
 
     private GameState gs;
     private SharedPreferences prefs;
-    private TextView lblHash, lblScrap, lblCrystal, lblWave, lblBase, lblResearch, lblCraft;
+    private TextView lblHash, lblScrap, lblCrystal, lblWave, lblBase, lblWeapon, lblResearch, lblCraft;
     private View gameOverPanel;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
@@ -84,6 +84,10 @@ public class MainActivity extends Activity {
         lblBase = tv(14, CYAN, Gravity.END);
         combat.addView(lblWave, weighted()); combat.addView(lblBase, weighted());
         panel.addView(combat, matchWrap());
+
+        lblWeapon = tv(11, ORANGE, Gravity.CENTER);
+        LinearLayout.LayoutParams weaponParams = matchWrap(); weaponParams.topMargin = dp(4);
+        panel.addView(lblWeapon, weaponParams);
 
         LinearLayout progress = row();
         lblResearch = tv(11, MUTED, Gravity.START);
@@ -161,6 +165,8 @@ public class MainActivity extends Activity {
         lblBase.setText("БАЗА  " + (int) Math.ceil(gs.baseHp) + "/" + (int) gs.baseMaxHp
                 + "  •  Т" + gs.turretCount());
         lblBase.setTextColor(gs.baseHp <= gs.baseMaxHp * .3 ? Color.rgb(255, 74, 78) : CYAN);
+        lblWeapon.setText("РУЧНОЙ ОГОНЬ  //  " + gs.manualWeaponName().toUpperCase()
+                + "  УР." + gs.manualWeaponLevel() + "  •  НАЖАТЬ / УДЕРЖИВАТЬ ЗОМБИ");
         lblResearch.setText("НАУКА  " + gs.researchStatus());
         lblCraft.setText("ЦЕХ  " + gs.craftStatus()
                 + (gs.pendingTowerCount() > 0 ? "  •  РЕЗЕРВ " + gs.pendingTowerCount() : ""));
