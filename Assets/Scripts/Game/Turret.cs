@@ -3,27 +3,29 @@ using UnityEngine;
 
 namespace DeadRig.Game
 {
-    /// <summary>2D-турель: выбирает цель по логическим координатам и выпускает энергоимпульсы.</summary>
+    /// <summary>
+    /// Турель: находит ближайшего зомби в радиусе, поворачивается и стреляет.
+    /// Урон зависит от бонуса исследований (EconomyManager.TurretDamageMultiplier).
+    /// </summary>
     public class Turret : MonoBehaviour
     {
         public float Range = 9f;
         public float FireInterval = 0.7f;
         public float BaseDamage = 10f;
-        public Vector2 LogicalPosition;
 
         private float _cooldown;
-        private SpriteRenderer _renderer;
-
-        private void Awake() => _renderer = GetComponent<SpriteRenderer>();
 
         private void Update()
         {
             _cooldown -= Time.deltaTime;
+
             Enemy target = FindTarget();
             if (target == null) return;
 
-            if (_renderer != null)
-                _renderer.flipX = target.LogicalPosition.x - target.LogicalPosition.y < LogicalPosition.x - LogicalPosition.y;
+            Vector3 dir = target.transform.position - transform.position;
+            dir.y = 0f;
+            if (dir.sqrMagnitude > 0.001f)
+                transform.rotation = Quaternion.LookRotation(dir);
 
             if (_cooldown <= 0f)
             {
@@ -35,31 +37,29 @@ namespace DeadRig.Game
         private Enemy FindTarget()
         {
             Enemy best = null;
-            float bestDistance = Range;
-            foreach (Enemy enemy in Enemy.All)
+            float bestDist = Range;
+            foreach (var e in Enemy.All)
             {
-                if (enemy == null) continue;
-                float distance = Vector2.Distance(LogicalPosition, enemy.LogicalPosition);
-                if (distance <= bestDistance)
-                {
-                    bestDistance = distance;
-                    best = enemy;
-                }
+                float d = Vector3.Distance(transform.position, e.transform.position);
+                if (d <= bestDist) { bestDist = d; best = e; }
             }
             return best;
         }
 
         private void Fire(Enemy target)
         {
-            float multiplier = GameManager.Instance != null
+            float mult = GameManager.Instance != null
                 ? (float)GameManager.Instance.Economy.TurretDamageMultiplier()
                 : 1f;
 
-            var go = new GameObject("EnergyProjectile");
-            go.transform.position = IsoProjection.ToScreen(LogicalPosition, 1.15f);
-            IsometricVisuals.AddSprite(go, "projectile", 210f, new Vector2(0.5f, 0.5f), 9000);
-            var projectile = go.AddComponent<Projectile>();
-            projectile.Init(target, BaseDamage * multiplier, 10f);
+            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            go.transform.position = transform.position + transform.forward * 1f + Vector3.up * 0.6f;
+            go.transform.localScale = Vector3.one * 0.25f;
+            go.GetComponent<Renderer>().material.color = Color.cyan;
+            Destroy(go.GetComponent<Collider>()); // снаряду коллайдер не нужен — летит по коду
+
+            var p = go.AddComponent<Projectile>();
+            p.Init(target, BaseDamage * mult, 14f);
         }
     }
 }
