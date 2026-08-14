@@ -5,18 +5,18 @@ using UnityEngine;
 namespace DeadRig.Game
 {
     /// <summary>
-    /// Собирает прототипный уровень из примитивов (low-poly заглушки):
-    /// земля, ядро базы, турель, точки спавна зомби, контроллер волн и HUD.
-    /// Работает без готовых ассетов и сцены.
+    /// Собирает 2D-изометрическую арену: тайловое поле, бункер, турель,
+    /// разломы спавна, декоративный свет и HUD. Не использует 3D-примитивы.
     /// </summary>
     public class PrototypeBuilder : MonoBehaviour
     {
+        private static readonly Color Background = new Color(0.035f, 0.055f, 0.062f, 1f);
+
         private void Awake()
         {
             EnsureGameManager();
-
-            BuildGround();
             BuildCamera();
+            BuildGround();
             BuildBase();
             BuildTurret();
             Transform[] spawnPoints = BuildSpawnPoints();
@@ -27,79 +27,98 @@ namespace DeadRig.Game
         private void EnsureGameManager()
         {
             if (GameManager.Instance == null)
-            {
-                var go = new GameObject("GameManager");
-                go.AddComponent<GameManager>();
-            }
-        }
-
-        private void BuildGround()
-        {
-            var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
-            ground.name = "Ground";
-            ground.transform.localScale = new Vector3(5f, 1f, 5f); // 50x50
-            ground.GetComponent<Renderer>().material.color = new Color(0.12f, 0.14f, 0.12f);
+                new GameObject("GameManager").AddComponent<GameManager>();
         }
 
         private void BuildCamera()
         {
-            var cam = Camera.main;
-            if (cam == null) return;
-            cam.transform.position = new Vector3(0f, 14f, -12f);
-            cam.transform.rotation = Quaternion.Euler(52f, 0f, 0f);
+            Camera cam = Camera.main;
+            if (cam == null)
+            {
+                var cameraObject = new GameObject("Main Camera");
+                cameraObject.tag = "MainCamera";
+                cam = cameraObject.AddComponent<Camera>();
+            }
+
+            cam.orthographic = true;
+            cam.clearFlags = CameraClearFlags.SolidColor;
+            cam.backgroundColor = Background;
+            cam.transform.position = new Vector3(0f, 0.6f, -10f);
+            cam.transform.rotation = Quaternion.identity;
+            cam.nearClipPlane = 0.1f;
+            cam.farClipPlane = 30f;
+            if (cam.GetComponent<IsometricCameraFitter>() == null)
+                cam.gameObject.AddComponent<IsometricCameraFitter>();
+        }
+
+        private void BuildGround()
+        {
+            var root = new GameObject("IsometricGround");
+            const int radius = 7;
+            Sprite tile = IsometricVisuals.Sprite("ground_tile", 256f, new Vector2(0.5f, 0.5f));
+
+            for (int x = -radius; x <= radius; x++)
+            {
+                for (int y = -radius; y <= radius; y++)
+                {
+                    var go = new GameObject("Tile_" + x + "_" + y);
+                    go.transform.SetParent(root.transform, false);
+                    var logical = new Vector2(x, y);
+                    go.transform.position = IsoProjection.ToScreen(logical);
+                    var renderer = go.AddComponent<SpriteRenderer>();
+                    renderer.sprite = tile;
+                    renderer.sortingOrder = IsoProjection.SortingOrder(logical, -1000);
+                    float noise = Mathf.PerlinNoise((x + 20) * 0.31f, (y + 20) * 0.31f);
+                    renderer.color = Color.Lerp(new Color(0.78f, 0.84f, 0.84f), Color.white, noise);
+                }
+            }
         }
 
         private void BuildBase()
         {
-            var core = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            core.name = "BaseCore";
-            core.transform.position = new Vector3(0f, 0.6f, 0f);
-            core.transform.localScale = new Vector3(1.6f, 1.2f, 1.6f);
-            core.GetComponent<Renderer>().material.color = new Color(0.95f, 0.55f, 0.1f);
+            var core = new GameObject("BaseCore");
+            Vector2 logical = Vector2.zero;
+            core.transform.position = IsoProjection.ToScreen(logical);
+            var renderer = IsometricVisuals.AddSprite(
+                core, "base_core", 145f, new Vector2(0.5f, 0.08f), IsoProjection.SortingOrder(logical, 20));
+            renderer.transform.localScale = Vector3.one * 0.94f;
             core.AddComponent<BaseCore>();
         }
 
         private void BuildTurret()
         {
             var turret = new GameObject("Turret");
-            turret.transform.position = new Vector3(0f, 0.5f, 4.5f);
+            Vector2 logical = new Vector2(3.2f, -2.7f);
+            turret.transform.position = IsoProjection.ToScreen(logical);
+            IsometricVisuals.AddSprite(
+                turret, "turret", 150f, new Vector2(0.5f, 0.09f), IsoProjection.SortingOrder(logical, 30));
 
-            var body = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            body.name = "Body";
-            body.transform.SetParent(turret.transform, false);
-            body.transform.localScale = new Vector3(0.8f, 0.4f, 0.8f);
-            body.GetComponent<Renderer>().material.color = new Color(0.35f, 0.35f, 0.4f);
-
-            var barrel = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            barrel.name = "Barrel";
-            barrel.transform.SetParent(turret.transform, false);
-            barrel.transform.localPosition = new Vector3(0f, 0.5f, 0.5f);
-            barrel.transform.localScale = new Vector3(0.25f, 0.25f, 1f);
-            barrel.GetComponent<Renderer>().material.color = new Color(0.25f, 0.25f, 0.3f);
-
-            var t = turret.AddComponent<Turret>();
-            t.Range = 9f;
-            t.FireInterval = 0.7f;
+            var logic = turret.AddComponent<Turret>();
+            logic.LogicalPosition = logical;
+            logic.Range = 9f;
+            logic.FireInterval = 0.7f;
         }
 
         private Transform[] BuildSpawnPoints()
         {
-            Vector3[] corners =
+            Vector2[] positions =
             {
-                new Vector3(-14f, 0f, -14f),
-                new Vector3( 14f, 0f, -14f),
-                new Vector3(-14f, 0f,  14f),
-                new Vector3( 14f, 0f,  14f),
+                new Vector2(-7.5f, 0f),
+                new Vector2(0f, -7.5f),
+                new Vector2(7.5f, 0f),
+                new Vector2(0f, 7.5f),
             };
 
-            var points = new Transform[corners.Length];
-            for (int i = 0; i < corners.Length; i++)
+            var points = new Transform[positions.Length];
+            for (int i = 0; i < positions.Length; i++)
             {
-                var marker = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                marker.name = "SpawnPoint_" + i;
-                marker.transform.position = corners[i];
-                marker.transform.localScale = new Vector3(0.4f, 0.4f, 0.4f);
-                marker.GetComponent<Renderer>().material.color = new Color(0.6f, 0.1f, 0.1f);
+                var marker = new GameObject("SpawnRift_" + i);
+                marker.transform.position = IsoProjection.ToScreen(positions[i]);
+                IsometricVisuals.AddSprite(
+                    marker, "spawn_rift", 150f, new Vector2(0.5f, 0.25f),
+                    IsoProjection.SortingOrder(positions[i], 5));
+                var point = marker.AddComponent<IsometricSpawnPoint>();
+                point.LogicalPosition = positions[i];
                 points[i] = marker.transform;
             }
             return points;
@@ -115,9 +134,13 @@ namespace DeadRig.Game
 
         private void BuildHud(WaveController wc)
         {
-            var go = new GameObject("HUD");
-            var hud = go.AddComponent<HUD>();
+            var hud = new GameObject("HUD").AddComponent<HUD>();
             hud.WaveController = wc;
         }
+    }
+
+    public sealed class IsometricSpawnPoint : MonoBehaviour
+    {
+        public Vector2 LogicalPosition;
     }
 }

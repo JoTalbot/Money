@@ -49,19 +49,21 @@ namespace DeadRig.UI
             scaler.referenceResolution = new Vector2(1080f, 1920f);
             canvasGO.AddComponent<GraphicRaycaster>();
 
-            // === Верхняя панель: валюты и статус ===
-            var top = CreatePanel(canvasGO.transform, "TopBar", new Vector2(0f, 1f), new Vector2(0f, -60f), new Vector2(1080f, 120f));
+            // === Верхняя панель: командная консоль ===
+            var top = CreatePanel(canvasGO.transform, "TopBar", new Vector2(0f, 1f), new Vector2(0f, -48f), new Vector2(1080f, 168f));
+            var title = CreateText(top.transform, "Title", "DEADRIG // УЗЕЛ 07", new Vector2(0.5f, 1f), new Vector2(0f, -18f), new Vector2(440f, 34f), 22, TextAnchor.MiddleCenter);
+            title.color = new Color(0.25f, 0.92f, 0.91f);
 
-            _hashLabel = CreateText(top.transform, "Hash", "Хеши: 0", new Vector2(0f, 1f), new Vector2(20f, -30f), new Vector2(320f, 44f), 32, TextAnchor.MiddleLeft);
-            _scrapLabel = CreateText(top.transform, "Scrap", "Лом: 0", new Vector2(0f, 1f), new Vector2(20f, -72f), new Vector2(320f, 40f), 28, TextAnchor.MiddleLeft);
-            _crystalLabel = CreateText(top.transform, "Crystal", "Кристаллы: 0", new Vector2(0.5f, 1f), new Vector2(0f, -30f), new Vector2(360f, 44f), 32, TextAnchor.MiddleCenter);
-            _waveLabel = CreateText(top.transform, "Wave", "Волна: 0", new Vector2(0.5f, 1f), new Vector2(0f, -72f), new Vector2(360f, 40f), 28, TextAnchor.MiddleCenter);
-            _baseLabel = CreateText(top.transform, "Base", "База: 100/100", new Vector2(1f, 1f), new Vector2(-20f, -30f), new Vector2(320f, 44f), 32, TextAnchor.MiddleRight);
-            _researchLabel = CreateText(top.transform, "Research", "Наука: —", new Vector2(1f, 1f), new Vector2(-20f, -72f), new Vector2(340f, 40f), 26, TextAnchor.MiddleRight);
-            _craftLabel = CreateText(top.transform, "Craft", "Мастерская: —", new Vector2(1f, 1f), new Vector2(-20f, -108f), new Vector2(340f, 36f), 22, TextAnchor.MiddleRight);
+            _hashLabel = CreateText(top.transform, "Hash", "ХЕШИ  0", new Vector2(0f, 1f), new Vector2(24f, -55f), new Vector2(320f, 44f), 31, TextAnchor.MiddleLeft);
+            _scrapLabel = CreateText(top.transform, "Scrap", "ЛОМ  0", new Vector2(0f, 1f), new Vector2(24f, -101f), new Vector2(320f, 40f), 27, TextAnchor.MiddleLeft);
+            _crystalLabel = CreateText(top.transform, "Crystal", "КРИСТАЛЛЫ  0", new Vector2(0.5f, 1f), new Vector2(0f, -55f), new Vector2(360f, 44f), 29, TextAnchor.MiddleCenter);
+            _waveLabel = CreateText(top.transform, "Wave", "ВОЛНА  0", new Vector2(0.5f, 1f), new Vector2(0f, -101f), new Vector2(360f, 40f), 27, TextAnchor.MiddleCenter);
+            _baseLabel = CreateText(top.transform, "Base", "БАЗА  100/100", new Vector2(1f, 1f), new Vector2(-24f, -55f), new Vector2(340f, 44f), 29, TextAnchor.MiddleRight);
+            _researchLabel = CreateText(top.transform, "Research", "НАУКА  —", new Vector2(1f, 1f), new Vector2(-24f, -101f), new Vector2(350f, 40f), 24, TextAnchor.MiddleRight);
+            _craftLabel = CreateText(top.transform, "Craft", "ЦЕХ  —", new Vector2(1f, 1f), new Vector2(-24f, -137f), new Vector2(350f, 34f), 21, TextAnchor.MiddleRight);
 
-            // === Нижняя панель: кнопки действий ===
-            var bottom = CreatePanel(canvasGO.transform, "BottomBar", new Vector2(0f, 0f), new Vector2(0f, 40f), new Vector2(1080f, 160f));
+            // === Нижняя панель: мобильная панель действий ===
+            var bottom = CreatePanel(canvasGO.transform, "BottomBar", new Vector2(0f, 0f), new Vector2(0f, 34f), new Vector2(1080f, 184f));
 
             _waveButton = CreateButton(bottom.transform, "WaveBtn", "Волна →", new Vector2(0.5f, 0f), new Vector2(0f, 12f), new Vector2(300f, 120f), 34);
             _waveBtnText = _waveButton.GetComponentInChildren<Text>();
@@ -94,17 +96,22 @@ namespace DeadRig.UI
             if (gm == null) return;
 
             var econ = gm.Economy;
-            _hashLabel.text = "Хеши: " + Format(econ.Soft);
-            _scrapLabel.text = "Лом: " + Format(econ.Scrap);
-            _crystalLabel.text = "Кристаллы: " + econ.Hard;
-            _waveLabel.text = "Волна: " + gm.Waves.WaveNumber + (gm.Waves.IsWaveActive ? " (идут зомби)" : "");
+            _hashLabel.text = "ХЕШИ  " + Format(econ.Soft);
+            _scrapLabel.text = "ЛОМ  " + Format(econ.Scrap);
+            _crystalLabel.text = "КРИСТАЛЛЫ  " + econ.Hard;
+            _waveLabel.text = "ВОЛНА  " + gm.Waves.WaveNumber + (gm.Waves.IsWaveActive ? "  // АТАКА" : "");
 
             var core = BaseCore.Instance;
             if (core != null)
-                _baseLabel.text = "База: " + Mathf.CeilToInt(core.Health) + "/" + Mathf.CeilToInt(core.MaxHealth);
+            {
+                _baseLabel.text = "БАЗА  " + Mathf.CeilToInt(core.Health) + "/" + Mathf.CeilToInt(core.MaxHealth);
+                _baseLabel.color = core.Health <= core.MaxHealth * 0.3f
+                    ? new Color(1f, 0.3f, 0.28f)
+                    : new Color(0.32f, 0.95f, 0.88f);
+            }
 
-            _researchLabel.text = "Наука: " + FirstAvailableResearchName();
-            _craftLabel.text = "Мастерская: " + FirstAvailableCraftName();
+            _researchLabel.text = "НАУКА  " + FirstAvailableResearchName();
+            _craftLabel.text = "ЦЕХ  " + FirstAvailableCraftName();
 
             bool waveActive = gm.Waves.IsWaveActive;
             _waveButton.interactable = !waveActive;
@@ -170,7 +177,7 @@ namespace DeadRig.UI
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);
             var img = go.AddComponent<Image>();
-            img.color = new Color(0f, 0f, 0f, 0.55f);
+            img.color = new Color(0.025f, 0.055f, 0.065f, 0.94f);
             var rt = (RectTransform)go.transform;
             rt.anchorMin = anchor; rt.anchorMax = anchor; rt.pivot = anchor;
             rt.anchoredPosition = anchoredPos; rt.sizeDelta = size;
@@ -185,7 +192,7 @@ namespace DeadRig.UI
             t.font = BuiltinFont();
             t.text = value;
             t.fontSize = fontSize;
-            t.color = Color.white;
+            t.color = new Color(0.9f, 0.95f, 0.94f);
             t.alignment = align;
             t.horizontalOverflow = HorizontalWrapMode.Overflow;
             t.verticalOverflow = VerticalWrapMode.Overflow;
@@ -200,8 +207,15 @@ namespace DeadRig.UI
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);
             var img = go.AddComponent<Image>();
-            img.color = new Color(0.18f, 0.32f, 0.18f, 0.95f);
+            img.color = name == "WaveBtn"
+                ? new Color(0.86f, 0.38f, 0.12f, 0.98f)
+                : new Color(0.08f, 0.27f, 0.29f, 0.98f);
             var btn = go.AddComponent<Button>();
+            var colors = btn.colors;
+            colors.highlightedColor = new Color(0.23f, 0.67f, 0.65f, 1f);
+            colors.pressedColor = new Color(0.04f, 0.15f, 0.17f, 1f);
+            colors.disabledColor = new Color(0.13f, 0.16f, 0.17f, 0.75f);
+            btn.colors = colors;
             btn.targetGraphic = img;
             var rt = (RectTransform)go.transform;
             rt.anchorMin = anchor; rt.anchorMax = anchor; rt.pivot = anchor;
