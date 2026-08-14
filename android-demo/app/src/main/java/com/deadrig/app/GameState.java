@@ -74,6 +74,17 @@ public class GameState {
     private double nextWaveTimer = 2.0;
     private boolean bossSpawnedThisWave = false;
 
+    // --- тактическая карта и окружение ---
+    private int mapId = 0; // 0 бункер, 1 каньон, 2 лаборатория
+    private int floorLevel = 0;
+    private int gateMode = 0;
+    private int weatherType = 0; // ясно, туман, кислота, мороз, буря
+    private int hazardType = 1; // огонь, радиация, лёд, электричество
+    private long routeSeed = 7331;
+    private double barricadeHp = 500;
+    private int capturedNodes = 0;
+    private final double[] platformHealth = new double[8];
+
     // --- сущности ---
     public final List<Zombie> zombies = new ArrayList<>();
     public final List<Projectile> projectiles = new ArrayList<>();
@@ -135,8 +146,10 @@ public class GameState {
         ensureWeaponRolls();
         checkDailyReset();
         if (placedTowerCount() == 0) placedTowerTypes[0] = 1;
-        for (int i = 0; i < towerLevels.length; i++)
+        for (int i = 0; i < towerLevels.length; i++) {
             if (placedTowerTypes[i] != 0 && towerLevels[i] == 0) towerLevels[i] = 1;
+            if (platformHealth[i] <= 0) platformHealth[i] = 100;
+        }
         syncTurrets();
     }
 
@@ -158,7 +171,54 @@ public class GameState {
     }
 
     // ===== формулы =====
-    public double miningRate() { return 1.0 * minerLevel * (1 + miningMult) * (1 + prestigeLevel * .5); }
+    public double miningRate() { return 1.0 * minerLevel * (1 + miningMult) * (1 + prestigeLevel * .5) * (1 + capturedNodes * .15); }
+    public int mapId() { return mapId; }
+    public int floorLevel() { return floorLevel; }
+    public int gateMode() { return gateMode; }
+    public int weatherType() { return weatherType; }
+    public int hazardType() { return hazardType; }
+    public double barricadeHp() { return barricadeHp; }
+    public int capturedNodes() { return capturedNodes; }
+    public double platformHealth(int slot) { return validSlot(slot) ? platformHealth[slot] : 0; }
+    public String mapName() { return mapId == 2 ? "Заброшенная лаборатория" : mapId == 1 ? "Красный каньон" : "Узел 07"; }
+    public String weatherName() {
+        String[] names = {"Ясно", "Туман", "Кислотный дождь", "Мороз", "ЭМ-буря"}; return names[weatherType];
+    }
+    public String hazardName() {
+        String[] names = {"Нет", "Огненная зона", "Радиация", "Ледяное поле", "Электрическая дуга"}; return names[hazardType];
+    }
+    public String cycleGateMode() { gateMode = (gateMode + 1) % 3; return "Ворота переключены: маршрут " + (gateMode + 1); }
+    public String cycleMap() {
+        int unlocked = wave >= 20 ? 3 : wave >= 10 ? 2 : 1;
+        if (unlocked <= 1) return "Каньон откроется после волны 10";
+        mapId = (mapId + 1) % unlocked; routeSeed += 97; return "Карта: " + mapName();
+    }
+    public String cycleHazard() { hazardType = hazardType % 4 + 1; return "Опасная зона: " + hazardName(); }
+    public String repairBarricade() {
+        if (barricadeHp >= 500) return "Баррикада цела";
+        double cost = Math.ceil((500 - barricadeHp) * .12);
+        if (scrap < cost) return "Нужно " + fmt(cost) + " лома";
+        scrap -= cost; barricadeHp = 500; return "Баррикада восстановлена";
+    }
+    public String captureNextNode() {
+        if (capturedNodes >= 2) return "Все внешние узлы захвачены";
+        double cost = 180 * (capturedNodes + 1);
+        if (hashes < cost) return "Нужно " + fmt(cost) + " хешей";
+        hashes -= cost; capturedNodes++; return "Узел захвачен: доход +15%";
+    }
+    public String repairPlatform(int slot) {
+        if (!validSlot(slot)) return "Площадка не найдена";
+        if (platformHealth[slot] >= 100) return "Площадка исправна";
+        double cost = Math.ceil(100 - platformHealth[slot]);
+        if (scrap < cost) return "Нужно " + fmt(cost) + " лома";
+        scrap -= cost; platformHealth[slot] = 100; syncTurrets(); return "Площадка отремонтирована";
+    }
+    public String descendFloor() {
+        if (floorLevel >= 2) return "Достигнут нижний этаж";
+        int requiredWave = (floorLevel + 1) * 10;
+        if (wave < requiredWave) return "Нужна волна " + requiredWave;
+        floorLevel++; routeSeed += 313; return "Открыт подземный этаж " + (floorLevel + 1);
+    }
     public int prestigeLevel() { return prestigeLevel; }
     public double prestigeRequirement() { return 5000.0 * Math.pow(10, prestigeLevel); }
     public String dailyStatus() {
@@ -180,6 +240,8 @@ public class GameState {
         hashes = 0; scrap = 0; minerLevel = 1; turretLevel = 1; manualWeaponLevel = 1;
         manualAmmo = manualMagazineSize(); manualHeat = 0; manualReloadTimer = 0; manualCombo = 0; ultimateCharge = 0;
         wave = 0; waveActive = false; zombies.clear(); projectiles.clear(); hitEffects.clear();
+        mapId = floorLevel = gateMode = weatherType = 0; hazardType = 1; barricadeHp = 500; capturedNodes = 0; routeSeed += 911;
+        for (int i = 0; i < platformHealth.length; i++) platformHealth[i] = 100;
         basicTurrets = laserTurrets = teslaTurrets = cryoTurrets = rocketTurrets = supportTurrets = 0; mineCharges = 0;
         for (int i = 0; i < placedTowerTypes.length; i++) {
             placedTowerTypes[i] = towerLevels[i] = towerPriorities[i] = towerBranches[i] = towerEvolutions[i] = 0;
@@ -253,6 +315,7 @@ public class GameState {
         double base = 4.0 + rangeBonus + (type == 2 ? .8 : type == 4 ? .5 : 0);
         if (towerBranchAt(slot) == 2) base += 1.5;
         if (towerEvolutionAt(slot) == 1 && type == 2) base += .8;
+        if (weatherType == 1) base *= .78;
         return base;
     }
     public double towerUpgradeCost(int slot) { return 25.0 * Math.pow(towerLevelAt(slot), 1.65); }
@@ -586,6 +649,24 @@ public class GameState {
         return r.requiresResearchId == null || doneResearch.contains(r.requiresResearchId);
     }
 
+    public double[] routePointForView(int pathId, int index) { return routePoint(pathId, index); }
+
+    private double[] routePoint(int pathId, int index) {
+        double x = PATHS[pathId][index][0], y = PATHS[pathId][index][1];
+        if (mapId == 1) { x *= 1.10; y *= .84; }
+        else if (mapId == 2) { x *= .84; y *= 1.10; }
+        if (index > 0 && index < PATHS[pathId].length - 1) {
+            double noise = Math.sin(routeSeed * .017 + pathId * 3.1 + index * 5.7) * .42;
+            x += noise; y -= noise * .55;
+        }
+        if (index == 2 || index == 3) {
+            if (gateMode == 1) { x += pathId % 2 == 0 ? 1.0 : -1.0; y += .35; }
+            else if (gateMode == 2) { y += pathId % 2 == 0 ? -1.0 : 1.0; x -= .35; }
+        }
+        double floorScale = 1.0 - floorLevel * .045;
+        return new double[]{x * floorScale, y * floorScale};
+    }
+
     // ===== главный тик =====
     public void update(double dt) {
         if (gameOver) return;
@@ -605,30 +686,42 @@ public class GameState {
             if (manualComboTimer <= 0) manualCombo = 0;
         }
         hashes += miningRate() * dt;
+        if (weatherType == 2 && waveActive) baseHp = Math.max(0, baseHp - .08 * dt);
 
         // Движение по маршрутам tower defense и урон базе в конечной точке.
         for (int i = zombies.size() - 1; i >= 0; i--) {
             Zombie z = zombies.get(i);
             if (z.burnTimer > 0) { z.burnTimer -= dt; z.hp -= z.burnDps * dt; }
             z.acidTimer = Math.max(0, z.acidTimer - dt);
-            double[][] route = PATHS[z.pathId];
-            if (z.pathIndex >= route.length) {
+            if (z.pathIndex >= PATHS[z.pathId].length) {
                 baseHp -= z.damage;
                 zombies.remove(i);
                 if (baseHp <= 0) { baseHp = 0; gameOver = true; }
                 continue;
             }
-            double dx = route[z.pathIndex][0] - z.x;
-            double dy = route[z.pathIndex][1] - z.y;
+            double[] waypoint = routePoint(z.pathId, z.pathIndex);
+            double dx = waypoint[0] - z.x, dy = waypoint[1] - z.y;
             double d = Math.hypot(dx, dy);
-            if (d < 0.18) {
+            if (d < 0.22) {
+                if (z.pathIndex == 3 && barricadeHp > 0) {
+                    barricadeHp = Math.max(0, barricadeHp - z.damage * dt * 1.8);
+                    continue;
+                }
                 z.pathIndex++;
                 continue;
             }
             z.slowTimer = Math.max(0, z.slowTimer - dt);
             double speedMultiplier = z.slowTimer > 0 ? .48 : 1.0;
-            z.x += dx / d * z.speed * speedMultiplier * dt;
-            z.y += dy / d * z.speed * speedMultiplier * dt;
+            if (weatherType == 3) speedMultiplier *= .82;
+            double[] hazard = routePoint(z.pathId, 3);
+            if (Math.hypot(z.x - hazard[0], z.y - hazard[1]) < 1.0) {
+                if (hazardType == 1) { z.burnTimer = Math.max(z.burnTimer, 1.2); z.burnDps = Math.max(z.burnDps, 8); }
+                else if (hazardType == 2) z.hp -= z.maxHp * .018 * dt;
+                else if (hazardType == 3) z.slowTimer = Math.max(z.slowTimer, .5);
+                else if (hazardType == 4) z.hp -= 7 * dt;
+            }
+            z.x += dx / Math.max(.001, d) * z.speed * speedMultiplier * dt;
+            z.y += dy / Math.max(.001, d) * z.speed * speedMultiplier * dt;
         }
 
         // спавн и очистка волн
@@ -642,6 +735,8 @@ public class GameState {
             if (zombiesToSpawn <= 0 && zombies.isEmpty()) {
                 waveActive = false;
                 dailyWaves++;
+                int damagedSlot = (int) (Math.random() * TOWER_SLOTS.length);
+                if (placedTowerTypes[damagedSlot] != 0) platformHealth[damagedSlot] = Math.max(0, platformHealth[damagedSlot] - 15 - wave * .5);
                 hashes += 20.0 * wave;
                 scrap += 10.0 * wave * (1 + scrapMult);
                 nextWaveTimer = 5.0;
@@ -673,6 +768,7 @@ public class GameState {
                     double interval = t.type == 5 ? 1.55 : t.type == 3 ? 1.15 : t.type == 4 ? .82 : t.type == 2 ? .85 : .7;
                     if (t.branch == 3) interval *= .65;
                     if (t.type == 1 && t.evolution == 1) interval *= .58;
+                    if (weatherType == 4) interval *= 1.25;
                     t.cooldown = interval / (1 + fireRateMult);
                 } else t.cooldown = 0.1;
             }
@@ -804,13 +900,15 @@ public class GameState {
         zombiesToSpawn = 5 + wave * 3;
         spawnTimer = 0.5;
         bossSpawnedThisWave = false;
+        weatherType = (wave + mapId + (int) (Math.random() * 3)) % 5;
         waveActive = true;
     }
 
     private void spawnZombie() {
         int pathId = (int) (Math.random() * PATHS.length);
-        double sx = PATHS[pathId][0][0] + (Math.random() - .5) * .22;
-        double sy = PATHS[pathId][0][1] + (Math.random() - .5) * .22;
+        double[] start = routePoint(pathId, 0);
+        double sx = start[0] + (Math.random() - .5) * .22;
+        double sy = start[1] + (Math.random() - .5) * .22;
         int type = 0;
         if (wave % 10 == 0 && !bossSpawnedThisWave) { type = 4; bossSpawnedThisWave = true; }
         else {
@@ -863,7 +961,7 @@ public class GameState {
         List<Turret> synced = new ArrayList<>();
         for (int slot = 0; slot < placedTowerTypes.length; slot++) {
             int type = placedTowerTypes[slot];
-            if (type == 0) continue;
+            if (type == 0 || platformHealth[slot] <= 0) continue;
             Turret turret = null;
             for (Turret old : turrets) if (old.slot == slot) { turret = old; break; }
             if (turret == null) turret = new Turret();
@@ -970,6 +1068,11 @@ public class GameState {
             o.put("baseHp", baseHp);
             o.put("baseMaxHp", baseMaxHp);
             o.put("wave", wave);
+            o.put("mapId", mapId); o.put("floorLevel", floorLevel); o.put("gateMode", gateMode);
+            o.put("weatherType", weatherType); o.put("hazardType", hazardType); o.put("routeSeed", routeSeed);
+            o.put("barricadeHp", barricadeHp); o.put("capturedNodes", capturedNodes);
+            JSONArray platforms = new JSONArray(); for (double hp : platformHealth) platforms.put(hp);
+            o.put("platformHealth", platforms);
             o.put("basicTurrets", basicTurrets);
             o.put("laserTurrets", laserTurrets);
             o.put("teslaTurrets", teslaTurrets);
@@ -1039,6 +1142,12 @@ public class GameState {
             baseHp = o.getDouble("baseHp");
             baseMaxHp = o.getDouble("baseMaxHp");
             wave = o.getInt("wave");
+            mapId = o.optInt("mapId", 0); floorLevel = o.optInt("floorLevel", 0); gateMode = o.optInt("gateMode", 0);
+            weatherType = o.optInt("weatherType", 0); hazardType = o.optInt("hazardType", 1);
+            routeSeed = o.optLong("routeSeed", 7331); barricadeHp = o.optDouble("barricadeHp", 500);
+            capturedNodes = o.optInt("capturedNodes", 0);
+            JSONArray platforms = o.optJSONArray("platformHealth");
+            if (platforms != null) for (int i = 0; i < platformHealth.length; i++) platformHealth[i] = platforms.optDouble(i, 100);
             basicTurrets = o.optInt("basicTurrets", 0);
             laserTurrets = o.optInt("laserTurrets", 0);
             teslaTurrets = o.optInt("teslaTurrets", 0);
@@ -1095,6 +1204,8 @@ public class GameState {
         dailyKey = ""; dailyKills = dailyWaves = dailyShots = 0; dailyClaimed = false;
         miningMult = 0; turretMult = 0; scrapMult = 0;
         baseHp = 100; baseMaxHp = 100;
+        mapId = floorLevel = gateMode = weatherType = 0; hazardType = 1; routeSeed = 7331; barricadeHp = 500; capturedNodes = 0;
+        for (int i = 0; i < platformHealth.length; i++) platformHealth[i] = 100;
         wave = 0; waveActive = false; zombiesToSpawn = 0; spawnTimer = 0; nextWaveTimer = 2.0;
         zombies.clear(); projectiles.clear(); hitEffects.clear(); turrets.clear();
         basicTurrets = 0; laserTurrets = 0; teslaTurrets = 0; cryoTurrets = 0; rocketTurrets = 0; supportTurrets = 0;

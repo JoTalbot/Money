@@ -84,12 +84,14 @@ public class GameView extends View {
         drawBackground(c, w, h);
         drawArena(c);
         drawRoutesAndSlots(c);
+        drawMapObjects(c);
         drawSelectedTowerRange(c);
         drawSpawnRifts(c);
         drawSortedActors(c);
         drawCombatDrone(c);
         drawProjectiles(c);
         drawHitEffects(c);
+        drawWeatherOverlay(c, w, h);
         drawVignette(c, w, h);
         // 30 FPS достаточно для idle/tower-defense и не блокирует обработку нажатий HUD.
         postInvalidateDelayed(33);
@@ -154,6 +156,29 @@ public class GameView extends View {
         }
     }
 
+    private void drawMapObjects(Canvas c) {
+        int[] hazardColors = {Color.TRANSPARENT, Color.rgb(255, 91, 38), Color.rgb(171, 255, 70), Color.rgb(112, 220, 255), Color.rgb(205, 112, 255)};
+        for (int route = 0; route < GameState.PATHS.length; route++) {
+            double[] zone = gs.routePointForView(route, 3);
+            PointF p = iso(zone[0], zone[1]);
+            int color = hazardColors[gs.hazardType()];
+            paint.setColor(Color.argb(35, Color.red(color), Color.green(color), Color.blue(color)));
+            c.drawOval(p.x - unit, p.y - unit * .5f, p.x + unit, p.y + unit * .5f, paint);
+            stroke.setColor(Color.argb(135, Color.red(color), Color.green(color), Color.blue(color)));
+            stroke.setStrokeWidth(unit * .045f); c.drawOval(p.x - unit, p.y - unit * .5f, p.x + unit, p.y + unit * .5f, stroke);
+            if (gs.barricadeHp() > 0) {
+                prism(c, p.x, p.y - unit * .12f, unit * .42f, unit * .18f, unit * .38f,
+                        Color.rgb(105, 88, 65), Color.rgb(68, 53, 39), Color.rgb(49, 38, 29));
+            }
+        }
+        double[][] nodes = {{-5.2, 5.2}, {5.2, -5.2}};
+        for (int i = 0; i < gs.capturedNodes(); i++) {
+            PointF p = iso(nodes[i][0], nodes[i][1]);
+            paint.setColor(Color.argb(80, 62, 240, 226)); c.drawCircle(p.x, p.y, unit * .55f, paint);
+            paint.setColor(CYAN); diamond(c, p.x, p.y, unit * .28f, unit * .14f, paint);
+        }
+    }
+
     private void drawSelectedTowerRange(Canvas c) {
         int slot = gs.selectedTowerSlot();
         if (slot < 0 || gs.towerTypeAt(slot) == 0) return;
@@ -167,12 +192,14 @@ public class GameView extends View {
 
     /** Объёмная дорога tower defense и фиксированные монтажные площадки. */
     private void drawRoutesAndSlots(Canvas c) {
-        for (double[][] route : GameState.PATHS) {
+        for (int routeIndex = 0; routeIndex < GameState.PATHS.length; routeIndex++) {
             path.reset();
-            PointF first = iso(route[0][0], route[0][1]);
+            double[] firstLogical = gs.routePointForView(routeIndex, 0);
+            PointF first = iso(firstLogical[0], firstLogical[1]);
             path.moveTo(first.x, first.y);
-            for (int i = 1; i < route.length; i++) {
-                PointF point = iso(route[i][0], route[i][1]);
+            for (int i = 1; i < GameState.PATHS[routeIndex].length; i++) {
+                double[] logical = gs.routePointForView(routeIndex, i);
+                PointF point = iso(logical[0], logical[1]);
                 path.lineTo(point.x, point.y);
             }
             stroke.setPathEffect(null);
@@ -285,10 +312,10 @@ public class GameView extends View {
     }
 
     private void drawSpawnRifts(Canvas c) {
-        drawRift(c, -7.2, 0);
-        drawRift(c, 0, -7.2);
-        drawRift(c, 7.2, 0);
-        drawRift(c, 0, 7.2);
+        for (int i = 0; i < GameState.PATHS.length; i++) {
+            double[] start = gs.routePointForView(i, 0);
+            drawRift(c, start[0], start[1]);
+        }
     }
 
     private void drawRift(Canvas c, double x, double y) {
@@ -528,6 +555,21 @@ public class GameView extends View {
         if (type == 4) return Color.rgb(118, 222, 255);
         if (type == 3) return Color.rgb(211, 104, 255);
         return type == 2 ? CYAN : ORANGE;
+    }
+
+    private void drawWeatherOverlay(Canvas c, int w, int h) {
+        int weather = gs.weatherType();
+        if (weather == 0) return;
+        int color = weather == 1 ? Color.argb(35, 190, 210, 205) : weather == 2 ? Color.argb(28, 145, 210, 65)
+                : weather == 3 ? Color.argb(30, 105, 205, 255) : Color.argb(25, 185, 105, 255);
+        paint.setColor(color); c.drawRect(0, 0, w, h, paint);
+        stroke.setStrokeWidth(unit * .025f);
+        stroke.setColor(weather == 2 ? Color.argb(110, 180, 255, 80) : weather == 3 ? Color.argb(100, 190, 240, 255) : Color.argb(90, 210, 150, 255));
+        for (int i = 0; i < 18; i++) {
+            float x = (i * 97 + System.currentTimeMillis() / 25) % Math.max(1, w);
+            float y = (i * 151 + System.currentTimeMillis() / 18) % Math.max(1, h);
+            c.drawLine(x, y, x + (weather == 4 ? unit * .3f : 0), y + unit * .35f, stroke);
+        }
     }
 
     private void drawVignette(Canvas c, int w, int h) {

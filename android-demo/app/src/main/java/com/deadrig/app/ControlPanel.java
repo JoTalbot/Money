@@ -75,6 +75,9 @@ public final class ControlPanel {
         addMetric(activity, list, "ОБЩИЙ УРОВЕНЬ", String.valueOf(state.turretLevel));
         addMetric(activity, list, "УСТАНОВЛЕНО / РЕЗЕРВ", state.turretCount() + " / " + state.pendingTowerCount());
         addMetric(activity, list, "ДОРОЖНЫЕ МИНЫ", String.valueOf(state.mineCharges()));
+        addCard(activity, list, "Тактическая карта", state.mapName() + "  •  этаж " + (state.floorLevel() + 1)
+                        + "\n" + state.weatherName() + "  •  " + state.hazardName(), "УПРАВЛЕНИЕ КАРТОЙ", true,
+                v -> { dialog.dismiss(); showMap(activity, state, changed); });
         addMetric(activity, list, "БОНУСЫ", "+" + percent(state.turretDamageBonus()) + " урон  •  +"
                 + percent(state.turretFireRateBonus()) + " темп  •  +" + String.format(Locale.US, "%.1f", state.turretRangeBonus()) + " дальность");
         addMetric(activity, list, "РУЧНОЕ ОРУЖИЕ", state.manualWeaponName() + "  ур." + state.manualWeaponLevel()
@@ -126,6 +129,28 @@ public final class ControlPanel {
         dialog.show(); fit(dialog);
     }
 
+    public static void showMap(Activity activity, GameState state, OnChanged changed) {
+        Dialog dialog = create(activity, "ТАКТИЧЕСКАЯ КАРТА", state.mapName() + "  //  этаж " + (state.floorLevel() + 1));
+        LinearLayout list = content(dialog);
+        addMetric(activity, list, "ПОГОДА", state.weatherName());
+        addMetric(activity, list, "ОПАСНАЯ ЗОНА", state.hazardName());
+        addMetric(activity, list, "БАРРИКАДА", (int) state.barricadeHp() + "/500");
+        addMetric(activity, list, "ВНЕШНИЕ УЗЛЫ", state.capturedNodes() + "/2");
+        addCard(activity, list, "Переключаемые ворота", "Текущая конфигурация маршрутов: " + (state.gateMode() + 1),
+                "ПЕРЕКЛЮЧИТЬ", true, v -> result(activity, state.cycleGateMode(), changed, dialog));
+        addCard(activity, list, "Сменить карту", "Каньон открывается на волне 10, лаборатория — на волне 20.",
+                "СЛЕДУЮЩАЯ КАРТА", true, v -> result(activity, state.cycleMap(), changed, dialog));
+        addCard(activity, list, "Настроить опасную зону", "Цикл: огонь, радиация, лёд, электричество.",
+                "СМЕНИТЬ ЗОНУ", true, v -> result(activity, state.cycleHazard(), changed, dialog));
+        addCard(activity, list, "Ремонт баррикады", "Останавливает врагов в середине маршрута.",
+                "ОТРЕМОНТИРОВАТЬ", true, v -> result(activity, state.repairBarricade(), changed, dialog));
+        addCard(activity, list, "Захват внешнего узла", "Каждый узел постоянно увеличивает доход на 15%.",
+                "ЗАХВАТИТЬ", true, v -> result(activity, state.captureNextNode(), changed, dialog));
+        addCard(activity, list, "Спуск глубже", "Новые этажи открываются на волнах 10 и 20.",
+                "ОТКРЫТЬ ЭТАЖ", true, v -> result(activity, state.descendFloor(), changed, dialog));
+        dialog.show(); fit(dialog);
+    }
+
     public static void showTower(Activity activity, GameState state, int slot, OnChanged changed) {
         int type = state.towerTypeAt(slot);
         if (type == 0) return;
@@ -134,6 +159,9 @@ public final class ControlPanel {
         LinearLayout list = content(dialog);
         addMetric(activity, list, "ЛОКАЛЬНЫЙ УРОВЕНЬ", String.valueOf(state.towerLevelAt(slot)));
         addMetric(activity, list, "ГЛОБАЛЬНЫЙ УРОВЕНЬ", String.valueOf(state.turretLevel));
+        addMetric(activity, list, "ПЛОЩАДКА", (int) state.platformHealth(slot) + "/100");
+        if (state.platformHealth(slot) < 100) addCard(activity, list, "Ремонт площадки", "Повреждённая площадка может отключить башню.",
+                "ОТРЕМОНТИРОВАТЬ", true, v -> result(activity, state.repairPlatform(slot), changed, dialog));
         addMetric(activity, list, "РАДИУС", String.format(Locale.US, "%.1f", state.towerRangeAt(slot)));
         addMetric(activity, list, "СПЕЦИАЛИЗАЦИЯ", state.towerBranchName(slot));
         addCard(activity, list, "Приоритет цели", state.towerPriorityName(slot), "СМЕНИТЬ ПРИОРИТЕТ", true,
