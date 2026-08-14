@@ -145,10 +145,12 @@ public class MainActivity extends Activity {
         lblScrap.setText("ЛОМ  " + GameState.fmt(gs.scrap));
         lblCrystal.setText("КРИСТ.  " + gs.crystals);
         lblWave.setText("ВОЛНА  " + gs.wave + (gs.waveActive ? "  // АТАКА" : ""));
-        lblBase.setText("БАЗА  " + (int) Math.ceil(gs.baseHp) + "/" + (int) gs.baseMaxHp);
+        lblBase.setText("БАЗА  " + (int) Math.ceil(gs.baseHp) + "/" + (int) gs.baseMaxHp
+                + "  •  Т" + gs.turretCount());
         lblBase.setTextColor(gs.baseHp <= gs.baseMaxHp * .3 ? Color.rgb(255, 74, 78) : CYAN);
         lblResearch.setText("НАУКА  " + gs.researchStatus());
-        lblCraft.setText("ЦЕХ  " + gs.craftStatus());
+        lblCraft.setText("ЦЕХ  " + gs.craftStatus()
+                + (gs.pendingTowerCount() > 0 ? "  •  РЕЗЕРВ " + gs.pendingTowerCount() : ""));
     }
 
     private LinearLayout row() {

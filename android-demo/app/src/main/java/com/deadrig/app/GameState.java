@@ -41,8 +41,25 @@ public class GameState {
     public final List<Projectile> projectiles = new ArrayList<>();
     public final List<Turret> turrets = new ArrayList<>();
 
+    /** Извилистые маршруты из четырёх порталов к ядру базы. */
+    public static final double[][][] PATHS = {
+            {{-7.2, 0}, {-5.7, -1.7}, {-3.6, -1.5}, {-2.7, 1.0}, {-1.2, 1.5}, {0, 0}},
+            {{0, -7.2}, {1.8, -5.6}, {1.6, -3.6}, {-1.0, -2.5}, {-1.5, -1.1}, {0, 0}},
+            {{7.2, 0}, {5.7, 1.7}, {3.6, 1.5}, {2.7, -1.0}, {1.2, -1.5}, {0, 0}},
+            {{0, 7.2}, {-1.8, 5.6}, {-1.6, 3.6}, {1.0, 2.5}, {1.5, 1.1}, {0, 0}}
+    };
+
+    /** Фиксированные площадки строительства вдоль маршрутов. */
+    public static final double[][] TOWER_SLOTS = {
+            {-5.0, 0.2}, {-3.6, -2.6}, {0.1, -5.0}, {2.7, -3.4},
+            {5.0, -0.2}, {3.6, 2.6}, {-0.1, 5.0}, {-2.7, 3.4}
+    };
+    private final int[] placedTowerTypes = new int[TOWER_SLOTS.length]; // 0 пусто, 1 пулемёт, 2 лазер, 3 тесла
     private int basicTurrets = 0;
     private int laserTurrets = 0;
+    private int teslaTurrets = 0;
+    private double fireRateMult = 0;
+    private double rangeBonus = 0;
 
     // --- исследования/крафт ---
     public final List<String> doneResearch = new ArrayList<>();
@@ -59,13 +76,46 @@ public class GameState {
     public GameState(SharedPreferences prefs) {
         this.prefs = prefs;
         load();
+        if (placedTowerCount() == 0) placedTowerTypes[0] = 1;
+        syncTurrets();
     }
 
     // ===== формулы =====
     public double miningRate() { return 1.0 * minerLevel * (1 + miningMult); }
     public double minerUpgradeCost() { return 10.0 * Math.pow(1.5, minerLevel - 1); }
     public double turretUpgradeCost() { return 15.0 * Math.pow(1.6, turretLevel - 1); }
-    public int turretCount() { return 1 + basicTurrets + laserTurrets; }
+    public int turretCount() { return placedTowerCount(); }
+    public int pendingTowerCount() {
+        return Math.max(0, 1 + basicTurrets + laserTurrets + teslaTurrets - placedTowerCount());
+    }
+    public int towerTypeAt(int slot) {
+        return slot >= 0 && slot < placedTowerTypes.length ? placedTowerTypes[slot] : 0;
+    }
+    private int placedTowerCount() {
+        int count = 0;
+        for (int type : placedTowerTypes) if (type != 0) count++;
+        return count;
+    }
+
+    /** Ставит лучшую доступную башню на выбранную фиксированную площадку. */
+    public String tryPlaceTower(int slot) {
+        if (slot < 0 || slot >= placedTowerTypes.length) return "Неверная площадка";
+        if (placedTowerTypes[slot] != 0) return "Площадка уже занята";
+        int placedBasic = 0, placedLaser = 0, placedTesla = 0;
+        for (int type : placedTowerTypes) {
+            if (type == 1) placedBasic++;
+            else if (type == 2) placedLaser++;
+            else if (type == 3) placedTesla++;
+        }
+        int type = 0;
+        if (placedTesla < teslaTurrets) type = 3;
+        else if (placedLaser < laserTurrets) type = 2;
+        else if (placedBasic < 1 + basicTurrets) type = 1;
+        if (type == 0) return "Сначала создайте башню в цехе";
+        placedTowerTypes[slot] = type;
+        syncTurrets();
+        return type == 3 ? "Тесла-башня установлена" : type == 2 ? "Лазерная башня установлена" : "Башня установлена";
+    }
 
     // ===== действия игрока (возвращают null при успехе, иначе текст для тоста) =====
     public String tryUpgradeMiner() {
@@ -107,7 +157,22 @@ public class GameState {
     public String tryStartCraft() {
         if (activeCraftId != null) return "Производство уже идёт";
         boolean anyUnlocked = false;
-        for (Defs.RecipeDef r : Defs.RECIPES) {
+        // Пока есть свободные площадки, цех приоритетно строит лучшую открытую башню.
+        if (pendingTowerCount() == 0 && placedTowerCount() < TOWER_SLOTS.length) {
+            for (int i = Defs.RECIPES.size() - 1; i >= 0; i--) {
+                Defs.RecipeDef r = Defs.RECIPES.get(i);
+                if (!r.outItem.startsWith("turret_") || r.outItem.equals("turret_module") || !isUnlocked(r)) continue;
+                anyUnlocked = true;
+                if (hashes < r.costHashes || scrap < r.costScrap) continue;
+                hashes -= r.costHashes; scrap -= r.costScrap;
+                activeCraftId = r.id; activeCraftLeft = r.durationSec;
+                return "Производство: " + r.name;
+            }
+        }
+        // Если башня ждёт установки или все слоты заняты — делаем усиление/стену.
+        for (int i = Defs.RECIPES.size() - 1; i >= 0; i--) {
+            Defs.RecipeDef r = Defs.RECIPES.get(i);
+            if (r.outItem.startsWith("turret_") && !r.outItem.equals("turret_module")) continue;
             if (!isUnlocked(r)) continue;
             anyUnlocked = true;
             if (hashes < r.costHashes || scrap < r.costScrap) continue;
@@ -115,6 +180,7 @@ public class GameState {
             activeCraftId = r.id; activeCraftLeft = r.durationSec;
             return "Производство: " + r.name;
         }
+        if (pendingTowerCount() > 0) return "Установите башню из резерва на площадку";
         if (anyUnlocked) return "Не хватает ресурсов";
         return "Нет рецептов";
     }
@@ -128,15 +194,21 @@ public class GameState {
         if (gameOver) return;
         hashes += miningRate() * dt;
 
-        // движение зомби и урон базе
+        // Движение по маршрутам tower defense и урон базе в конечной точке.
         for (int i = zombies.size() - 1; i >= 0; i--) {
             Zombie z = zombies.get(i);
-            double dx = -z.x, dy = -z.y;
-            double d = Math.hypot(dx, dy);
-            if (d < 0.7) {
+            double[][] route = PATHS[z.pathId];
+            if (z.pathIndex >= route.length) {
                 baseHp -= z.damage;
                 zombies.remove(i);
                 if (baseHp <= 0) { baseHp = 0; gameOver = true; }
+                continue;
+            }
+            double dx = route[z.pathIndex][0] - z.x;
+            double dy = route[z.pathIndex][1] - z.y;
+            double d = Math.hypot(dx, dy);
+            if (d < 0.18) {
+                z.pathIndex++;
                 continue;
             }
             z.x += dx / d * z.speed * dt;
@@ -162,19 +234,20 @@ public class GameState {
             if (nextWaveTimer <= 0) startWave();
         }
 
-        // турели
+        // Башни у дороги: дальность, скорострельность и урон зависят от исследований и типа.
         syncTurrets();
         for (Turret t : turrets) {
             t.cooldown -= dt;
             if (t.cooldown <= 0) {
-                Zombie target = nearestZombie(t.x, t.y, 9.0);
+                Zombie target = nearestZombie(t.x, t.y, 4.0 + rangeBonus + (t.type == 2 ? .8 : 0));
                 if (target != null) {
                     double dx = target.x - t.x, dy = target.y - t.y;
-                    double d = Math.hypot(dx, dy);
+                    double d = Math.max(.001, Math.hypot(dx, dy));
                     t.aimX = dx / d; t.aimY = dy / d;
-                    double dmg = 10.0 * turretLevel * (1 + turretMult) * (t.laser ? 2 : 1);
-                    projectiles.add(new Projectile(t.x, t.y, target, dmg, 14.0));
-                    t.cooldown = 0.7;
+                    double typeDamage = t.type == 3 ? 2.8 : t.type == 2 ? 2.0 : 1.0;
+                    double dmg = 10.0 * turretLevel * (1 + turretMult) * typeDamage;
+                    projectiles.add(new Projectile(t.x, t.y, target, dmg, t.type == 3 ? 10.0 : 14.0, t.type));
+                    t.cooldown = (t.type == 3 ? 1.15 : t.type == 2 ? .85 : .7) / (1 + fireRateMult);
                 } else {
                     t.cooldown = 0.1;
                 }
@@ -218,14 +291,11 @@ public class GameState {
     }
 
     private void spawnZombie() {
-        // Четыре видимых изометрических разлома по сторонам арены.
-        int side = (int) (Math.random() * 4);
-        double sx = side == 0 ? -7.2 : side == 2 ? 7.2 : 0;
-        double sy = side == 1 ? -7.2 : side == 3 ? 7.2 : 0;
-        sx += (Math.random() - .5) * .55;
-        sy += (Math.random() - .5) * .55;
+        int pathId = (int) (Math.random() * PATHS.length);
+        double sx = PATHS[pathId][0][0] + (Math.random() - .5) * .22;
+        double sy = PATHS[pathId][0][1] + (Math.random() - .5) * .22;
         double hp = 10.0 * Math.pow(1.25, wave - 1);
-        zombies.add(new Zombie(sx, sy, hp, 1.45, 8.0));
+        zombies.add(new Zombie(sx, sy, hp, 1.25, 8.0, pathId));
     }
 
     private Zombie nearestZombie(double x, double y, double range) {
@@ -238,17 +308,21 @@ public class GameState {
     }
 
     private void syncTurrets() {
-        int want = turretCount();
-        while (turrets.size() < want) turrets.add(new Turret());
-        while (turrets.size() > want) turrets.remove(turrets.size() - 1);
-        double r = 2.4;
-        for (int i = 0; i < turrets.size(); i++) {
-            Turret t = turrets.get(i);
-            double a = i * 2 * Math.PI / turrets.size() + 0.5;
-            t.x = Math.cos(a) * r;
-            t.y = Math.sin(a) * r;
-            t.laser = i > basicTurrets;
+        List<Turret> synced = new ArrayList<>();
+        for (int slot = 0; slot < placedTowerTypes.length; slot++) {
+            int type = placedTowerTypes[slot];
+            if (type == 0) continue;
+            Turret turret = null;
+            for (Turret old : turrets) if (old.slot == slot) { turret = old; break; }
+            if (turret == null) turret = new Turret();
+            turret.slot = slot;
+            turret.type = type;
+            turret.x = TOWER_SLOTS[slot][0];
+            turret.y = TOWER_SLOTS[slot][1];
+            synced.add(turret);
         }
+        turrets.clear();
+        turrets.addAll(synced);
     }
 
     private void completeResearch() {
@@ -258,6 +332,8 @@ public class GameState {
             if (d.effectType == 0) miningMult += d.value;
             else if (d.effectType == 1) turretMult += d.value;
             else if (d.effectType == 2) scrapMult += d.value;
+            else if (d.effectType == 3) fireRateMult += d.value;
+            else if (d.effectType == 4) rangeBonus += d.value;
         }
         activeResearchId = null;
     }
@@ -267,6 +343,8 @@ public class GameState {
         if (r != null) {
             if (r.outItem.equals("turret_basic")) basicTurrets++;
             else if (r.outItem.equals("turret_laser")) laserTurrets++;
+            else if (r.outItem.equals("turret_tesla")) teslaTurrets++;
+            else if (r.outItem.equals("turret_module")) turretLevel++;
             else if (r.outItem.equals("wall")) {
                 baseMaxHp += 20;
                 baseHp = Math.min(baseMaxHp, baseHp + 20);
@@ -292,6 +370,12 @@ public class GameState {
             o.put("wave", wave);
             o.put("basicTurrets", basicTurrets);
             o.put("laserTurrets", laserTurrets);
+            o.put("teslaTurrets", teslaTurrets);
+            o.put("fireRateMult", fireRateMult);
+            o.put("rangeBonus", rangeBonus);
+            JSONArray slots = new JSONArray();
+            for (int type : placedTowerTypes) slots.put(type);
+            o.put("placedTowerTypes", slots);
             o.put("lastSeen", System.currentTimeMillis());
             JSONArray arr = new JSONArray();
             for (String s : doneResearch) arr.put(s);
@@ -316,8 +400,21 @@ public class GameState {
             baseHp = o.getDouble("baseHp");
             baseMaxHp = o.getDouble("baseMaxHp");
             wave = o.getInt("wave");
-            basicTurrets = o.getInt("basicTurrets");
-            laserTurrets = o.getInt("laserTurrets");
+            basicTurrets = o.optInt("basicTurrets", 0);
+            laserTurrets = o.optInt("laserTurrets", 0);
+            teslaTurrets = o.optInt("teslaTurrets", 0);
+            fireRateMult = o.optDouble("fireRateMult", 0);
+            rangeBonus = o.optDouble("rangeBonus", 0);
+            JSONArray slots = o.optJSONArray("placedTowerTypes");
+            if (slots != null) {
+                for (int i = 0; i < placedTowerTypes.length && i < slots.length(); i++)
+                    placedTowerTypes[i] = slots.optInt(i, 0);
+            } else {
+                // Миграция сейва v0.2: раскладываем уже созданные башни по первым площадкам.
+                int index = 0;
+                for (int i = 0; i < 1 + basicTurrets && index < placedTowerTypes.length; i++) placedTowerTypes[index++] = 1;
+                for (int i = 0; i < laserTurrets && index < placedTowerTypes.length; i++) placedTowerTypes[index++] = 2;
+            }
             long ls = o.getLong("lastSeen");
             JSONArray arr = o.optJSONArray("doneResearch");
             doneResearch.clear();
@@ -337,7 +434,10 @@ public class GameState {
         baseHp = 100; baseMaxHp = 100;
         wave = 0; waveActive = false; zombiesToSpawn = 0; spawnTimer = 0; nextWaveTimer = 2.0;
         zombies.clear(); projectiles.clear(); turrets.clear();
-        basicTurrets = 0; laserTurrets = 0;
+        basicTurrets = 0; laserTurrets = 0; teslaTurrets = 0;
+        fireRateMult = 0; rangeBonus = 0;
+        for (int i = 0; i < placedTowerTypes.length; i++) placedTowerTypes[i] = 0;
+        placedTowerTypes[0] = 1;
         doneResearch.clear(); activeResearchId = null; activeCraftId = null;
         activeResearchLeft = 0; activeCraftLeft = 0;
         gameOver = false;
@@ -375,21 +475,24 @@ public class GameState {
     // ===== сущности =====
     public static class Zombie {
         double x, y, hp, speed, damage;
-        Zombie(double x, double y, double hp, double speed, double damage) {
+        int pathId, pathIndex = 1;
+        Zombie(double x, double y, double hp, double speed, double damage, int pathId) {
             this.x = x; this.y = y; this.hp = hp; this.speed = speed; this.damage = damage;
+            this.pathId = pathId;
         }
     }
 
     public static class Projectile {
         double x, y, damage, speed;
+        int type;
         Zombie target;
-        Projectile(double x, double y, Zombie t, double dmg, double spd) {
-            this.x = x; this.y = y; target = t; damage = dmg; speed = spd;
+        Projectile(double x, double y, Zombie t, double dmg, double spd, int type) {
+            this.x = x; this.y = y; target = t; damage = dmg; speed = spd; this.type = type;
         }
     }
 
     public static class Turret {
         double x, y, cooldown, aimX = 1, aimY = 0;
-        boolean laser;
+        int slot, type = 1;
     }
 }

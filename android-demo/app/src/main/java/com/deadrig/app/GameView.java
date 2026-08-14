@@ -3,13 +3,16 @@ package com.deadrig.app;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.DashPathEffect;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PointF;
 import android.graphics.RadialGradient;
 import android.graphics.Shader;
+import android.view.MotionEvent;
 import android.view.View;
+import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -67,6 +70,7 @@ public class GameView extends View {
 
         drawBackground(c, w, h);
         drawArena(c);
+        drawRoutesAndSlots(c);
         drawSpawnRifts(c);
         drawSortedActors(c);
         drawProjectiles(c);
@@ -131,6 +135,68 @@ public class GameView extends View {
             c.drawCircle(left.x * .3f + right.x * .7f, left.y * .3f + right.y * .7f,
                     Math.max(1.5f, unit * .035f), paint);
         }
+    }
+
+    /** Объёмная дорога tower defense и фиксированные монтажные площадки. */
+    private void drawRoutesAndSlots(Canvas c) {
+        for (double[][] route : GameState.PATHS) {
+            path.reset();
+            PointF first = iso(route[0][0], route[0][1]);
+            path.moveTo(first.x, first.y);
+            for (int i = 1; i < route.length; i++) {
+                PointF point = iso(route[i][0], route[i][1]);
+                path.lineTo(point.x, point.y);
+            }
+            stroke.setPathEffect(null);
+            stroke.setStrokeWidth(unit * .72f);
+            stroke.setColor(Color.rgb(13, 23, 25));
+            c.drawPath(path, stroke);
+            stroke.setStrokeWidth(unit * .58f);
+            stroke.setColor(Color.rgb(50, 61, 61));
+            c.drawPath(path, stroke);
+            stroke.setStrokeWidth(unit * .055f);
+            stroke.setColor(Color.argb(170, 231, 139, 49));
+            stroke.setPathEffect(new DashPathEffect(new float[]{unit * .28f, unit * .22f}, 0));
+            c.drawPath(path, stroke);
+            stroke.setPathEffect(null);
+        }
+
+        for (int i = 0; i < GameState.TOWER_SLOTS.length; i++) {
+            double[] slot = GameState.TOWER_SLOTS[i];
+            PointF p = iso(slot[0], slot[1]);
+            boolean occupied = gs.towerTypeAt(i) != 0;
+            float r = unit * .42f;
+            paint.setColor(occupied ? Color.rgb(32, 47, 49)
+                    : gs.pendingTowerCount() > 0 ? Color.rgb(47, 105, 101) : Color.rgb(29, 44, 46));
+            diamond(c, p.x, p.y + unit * .18f, r, r * .42f, paint);
+            stroke.setStrokeWidth(unit * .055f);
+            stroke.setColor(occupied ? Color.rgb(74, 99, 99)
+                    : gs.pendingTowerCount() > 0 ? CYAN : Color.rgb(72, 91, 91));
+            diamond(c, p.x, p.y + unit * .18f, r, r * .42f, stroke);
+            if (!occupied) {
+                stroke.setStrokeWidth(unit * .05f);
+                c.drawLine(p.x - r * .24f, p.y + unit * .18f, p.x + r * .24f, p.y + unit * .18f, stroke);
+                c.drawLine(p.x, p.y + unit * .18f - r * .24f, p.x, p.y + unit * .18f + r * .24f, stroke);
+            }
+        }
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        if (event.getAction() != MotionEvent.ACTION_UP) return true;
+        int best = -1;
+        float bestDistance = unit * .82f;
+        for (int i = 0; i < GameState.TOWER_SLOTS.length; i++) {
+            PointF p = iso(GameState.TOWER_SLOTS[i][0], GameState.TOWER_SLOTS[i][1]);
+            float distance = (float) Math.hypot(event.getX() - p.x, event.getY() - p.y);
+            if (distance < bestDistance) { bestDistance = distance; best = i; }
+        }
+        if (best >= 0) {
+            String message = gs.tryPlaceTower(best);
+            Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
+            invalidate();
+        }
+        return true;
     }
 
     private void drawSpawnRifts(Canvas c) {
@@ -226,9 +292,10 @@ public class GameView extends View {
         paint.setColor(Color.argb(90, 0, 0, 0)); c.drawOval(p.x - s, p.y + s * .72f, p.x + s, p.y + s * 1.08f, paint);
         prism(c, p.x, p.y + s * .42f, s, s * .48f, s * .50f,
                 Color.rgb(77, 94, 97), Color.rgb(37, 53, 56), Color.rgb(27, 43, 46));
+        int towerTop = t.type == 3 ? Color.rgb(113, 73, 145)
+                : t.type == 2 ? Color.rgb(71, 84, 132) : Color.rgb(91, 107, 108);
         prism(c, p.x, p.y - s * .10f, s * .72f, s * .35f, s * .68f,
-                t.laser ? Color.rgb(71, 84, 132) : Color.rgb(91, 107, 108),
-                Color.rgb(43, 56, 62), Color.rgb(30, 44, 49));
+                towerTop, Color.rgb(43, 56, 62), Color.rgb(30, 44, 49));
 
         float dx = (float) (t.aimX - t.aimY);
         float dy = (float) ((t.aimX + t.aimY) * .5);
@@ -237,9 +304,10 @@ public class GameView extends View {
         dx /= len; dy /= len;
         stroke.setStrokeWidth(s * .22f); stroke.setColor(Color.rgb(18, 28, 32));
         c.drawLine(p.x, p.y - s * .52f, p.x + dx * s * 1.35f, p.y - s * .52f + dy * s * 1.35f, stroke);
-        stroke.setStrokeWidth(s * .08f); stroke.setColor(t.laser ? CYAN : ORANGE);
+        int energyColor = t.type == 3 ? Color.rgb(206, 105, 255) : t.type == 2 ? CYAN : ORANGE;
+        stroke.setStrokeWidth(s * .08f); stroke.setColor(energyColor);
         c.drawLine(p.x + dx * s, p.y - s * .52f + dy * s, p.x + dx * s * 1.4f, p.y - s * .52f + dy * s * 1.4f, stroke);
-        paint.setColor(CYAN); c.drawCircle(p.x, p.y - s * .75f, s * .16f, paint);
+        paint.setColor(energyColor); c.drawCircle(p.x, p.y - s * .75f, s * .16f, paint);
     }
 
     private void drawZombie(Canvas c, GameState.Zombie z) {
@@ -271,11 +339,12 @@ public class GameView extends View {
     private void drawProjectiles(Canvas c) {
         for (GameState.Projectile p : gs.projectiles) {
             PointF q = iso(p.x, p.y);
-            float r = unit * .13f;
+            float r = unit * (p.type == 3 ? .18f : .13f);
+            int glow = p.type == 3 ? Color.rgb(212, 104, 255) : p.type == 2 ? CYAN : ORANGE;
             paint.setShader(new RadialGradient(q.x, q.y - unit * .18f, r * 3f,
-                    Color.argb(220, 101, 255, 248), Color.TRANSPARENT, Shader.TileMode.CLAMP));
+                    glow, Color.TRANSPARENT, Shader.TileMode.CLAMP));
             c.drawCircle(q.x, q.y - unit * .18f, r * 3f, paint); paint.setShader(null);
-            paint.setColor(Color.rgb(205, 255, 253)); c.drawCircle(q.x, q.y - unit * .18f, r, paint);
+            paint.setColor(Color.WHITE); c.drawCircle(q.x, q.y - unit * .18f, r, paint);
         }
     }
 
