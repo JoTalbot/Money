@@ -1,5 +1,16 @@
 plugins { id 'com.android.application' }
 
+// Подпись задаётся только через окружение; секреты никогда не хранятся в репозитории.
+def releaseKeystorePath = System.getenv("DEADRIG_KEYSTORE")
+def releaseStorePassword = System.getenv("DEADRIG_STORE_PASSWORD")
+def releaseKeyAlias = System.getenv("DEADRIG_KEY_ALIAS")
+def releaseKeyPassword = System.getenv("DEADRIG_KEY_PASSWORD")
+def hasReleaseSigning = releaseKeystorePath != null
+        && releaseStorePassword != null
+        && releaseKeyAlias != null
+        && releaseKeyPassword != null
+        && file(releaseKeystorePath).exists()
+
 android {
     namespace 'com.deadrig.app'
     compileSdk 33
@@ -12,19 +23,21 @@ android {
         versionName "2.0.0"
     }
 
-    signingConfigs {
-        release {
-            storeFile file("/home/user/.toolchain/deadrig.keystore")
-            storePassword "deadrig123"
-            keyAlias "deadrig"
-            keyPassword "deadrig123"
+    if (hasReleaseSigning) {
+        signingConfigs {
+            release {
+                storeFile file(releaseKeystorePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
         }
     }
 
     buildTypes {
         release {
             minifyEnabled false
-            signingConfig signingConfigs.release
+            if (hasReleaseSigning) signingConfig signingConfigs.release
         }
     }
 

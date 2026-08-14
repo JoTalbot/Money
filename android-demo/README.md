@@ -7,6 +7,7 @@
 
 - `releases/DeadRig-v2.0.0-complete-release.apk` — актуальная release-сборка со всеми 100 улучшениями.
 - `releases/DeadRig-v2.0.0-complete-debug.apk` — актуальная debug-сборка.
+- `releases/DeadRig-v2.0.0-release-unsigned.aab` — AAB для настройки Play App Signing.
 - Старые APK оставлены как архив предыдущих прототипов.
 
 Установка: разрешить установку из неизвестных источников → открыть APK.
@@ -21,6 +22,21 @@ gradle assembleDebug     # или assembleRelease
 ```
 
 APK: `app/build/outputs/apk/debug/app-debug.apk`
+AAB: `app/build/outputs/bundle/release/app-release.aab`
+
+### Release-подпись
+
+Секреты передаются только через окружение:
+
+```bash
+export DEADRIG_KEYSTORE=/secure/path/deadrig.keystore
+export DEADRIG_STORE_PASSWORD='...'
+export DEADRIG_KEY_ALIAS='deadrig'
+export DEADRIG_KEY_PASSWORD='...'
+gradle bundleRelease
+```
+
+Без этих переменных `bundleRelease` создаёт unsigned AAB для последующей подписи/Play App Signing. GitHub Actions автоматически запускает lint, собирает debug APK и unsigned release AAB.
 
 ## Что внутри (порт Unity-ядра 1:1)
 
