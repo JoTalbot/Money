@@ -55,6 +55,8 @@ public final class ControlPanel {
         LinearLayout list = content(dialog);
         addMetric(activity, list, "УРОВЕНЬ", String.valueOf(state.minerLevel));
         addMetric(activity, list, "ДОХОД", String.format(Locale.US, "%.1f хеш/с", state.miningRate()));
+        addCard(activity, list, "Экономический комплекс", "Энергия, топливо, материалы, контракты, рынок и сеть узлов.",
+                "ОТКРЫТЬ", true, v -> { dialog.dismiss(); showEconomy(activity, state, changed); });
         addCard(activity, list, "Расширить ферму",
                 "Новый ASIC-модуль увеличивает постоянную добычу.\nСтоимость: " + GameState.fmt(state.minerUpgradeCost()) + " хешей",
                 "УЛУЧШИТЬ", true, v -> result(activity, state.tryUpgradeMiner(), changed, dialog));
@@ -128,6 +130,50 @@ public final class ControlPanel {
                     null, false, null);
         }
         addHint(activity, list, "Чтобы установить башню из резерва, закройте экран и нажмите на светящуюся свободную площадку у дороги.");
+        dialog.show(); fit(dialog);
+    }
+
+    public static void showEconomy(Activity activity, GameState state, OnChanged changed) {
+        Dialog dialog = create(activity, "ЭКОНОМИЧЕСКИЙ КОМПЛЕКС", "Энергосеть и производство узла");
+        LinearLayout list = content(dialog);
+        addMetric(activity, list, "ЭНЕРГИЯ", (int) state.energy() + "/" + (int) state.maxEnergy());
+        addMetric(activity, list, "ТОПЛИВО", GameState.fmt(state.fuel()));
+        addMetric(activity, list, "МЕТАЛЛ", GameState.fmt(state.metal()));
+        addMetric(activity, list, "ЭЛЕКТРОНИКА", GameState.fmt(state.electronics()));
+        addMetric(activity, list, "БИОМАТЕРИАЛ", GameState.fmt(state.biomass()));
+        addMetric(activity, list, "ИЗНОС ФЕРМЫ", (int) state.minerDurability() + "%");
+        addMetric(activity, list, "СПЕЦИАЛИЗАЦИЯ", state.specializationName());
+        addMetric(activity, list, "СЕТЬ УЗЛОВ", state.networkNodes() + "/5");
+        addCard(activity, list, "Генератор ур." + state.generatorLevel(), "Увеличивает производство и запас энергии.", "УЛУЧШИТЬ", true,
+                v -> result(activity, state.upgradeGenerator(), changed, dialog));
+        addCard(activity, list, "Запас топлива", "Автоматически сжигается при дефиците энергии.", "КУПИТЬ 25", true,
+                v -> result(activity, state.buyFuel(), changed, dialog));
+        addCard(activity, list, "Дроны-сборщики ур." + state.collectorDroneLevel(), "Пассивно добывают три производственных ресурса.", "УЛУЧШИТЬ", true,
+                v -> result(activity, state.upgradeCollectorDrone(), changed, dialog));
+        if (state.minerDurability() < 100) addCard(activity, list, "Ремонт фермы", "Износ снижает скорость майнинга.", "ОТРЕМОНТИРОВАТЬ", true,
+                v -> result(activity, state.repairMiner(), changed, dialog));
+        if (state.contractSeconds() > 0) addCard(activity, list, "Контракт: " + state.contractName(), "Осталось " + state.contractSeconds() + " сек.", null, false, null);
+        else {
+            addCard(activity, list, "Контракт: металл", "Долгий заказ с хешами, кристаллом и электроникой.", "ЗАПУСТИТЬ", true,
+                    v -> result(activity, state.startProductionContract(0), changed, dialog));
+            addCard(activity, list, "Контракт: электроника", "Долгий заказ с хешами, кристаллом и биоматериалом.", "ЗАПУСТИТЬ", true,
+                    v -> result(activity, state.startProductionContract(1), changed, dialog));
+            addCard(activity, list, "Контракт: биообразцы", "Долгий заказ с хешами, кристаллом и металлом.", "ЗАПУСТИТЬ", true,
+                    v -> result(activity, state.startProductionContract(2), changed, dialog));
+        }
+        addCard(activity, list, "Рынок: металл", "Курс меняется каждый час.", "КУПИТЬ", true,
+                v -> result(activity, state.tradeMarket(0), changed, dialog));
+        addCard(activity, list, "Рынок: электроника", "Курс меняется каждый час.", "КУПИТЬ", true,
+                v -> result(activity, state.tradeMarket(1), changed, dialog));
+        addCard(activity, list, "Рынок: биоматериал", "Курс меняется каждый час.", "КУПИТЬ", true,
+                v -> result(activity, state.tradeMarket(2), changed, dialog));
+        addCard(activity, list, "Рискованная инвестиция", state.investmentSeconds() > 0 ? "Осталось " + state.investmentSeconds() + " сек." : "Результат от 45% до 240% вложения.",
+                state.investmentSeconds() > 0 ? null : "ВЛОЖИТЬ 150", state.investmentSeconds() <= 0,
+                v -> result(activity, state.startInvestment(), changed, dialog));
+        addCard(activity, list, "Сменить специализацию", "+25% майнинг, +20% оборона, +25% наука или +28% производство.", "СМЕНИТЬ", true,
+                v -> result(activity, state.cycleSpecialization(), changed, dialog));
+        addCard(activity, list, "Расширить сеть", "Каждый постоянный узел даёт +10% дохода.", "ПОДКЛЮЧИТЬ", true,
+                v -> result(activity, state.buyNetworkNode(), changed, dialog));
         dialog.show(); fit(dialog);
     }
 

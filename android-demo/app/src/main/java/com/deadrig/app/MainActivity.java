@@ -172,8 +172,8 @@ public class MainActivity extends Activity {
         lblCrystal.setText("КРИСТ.  " + gs.crystals);
         lblWave.setText("ВОЛНА " + gs.wave + (gs.waveActive ? (gs.wave > 0 && gs.wave % 10 == 0 ? " // БОСС" : " // " + gs.waveKindName().toUpperCase()) : "")
                 + " • " + gs.waveModifierName().toUpperCase() + " • " + gs.weatherName().toUpperCase());
-        lblBase.setText("БАЗА  " + (int) Math.ceil(gs.baseHp) + "/" + (int) gs.baseMaxHp
-                + "  •  Т" + gs.turretCount());
+        lblBase.setText("БАЗА " + (int) Math.ceil(gs.baseHp) + "/" + (int) gs.baseMaxHp
+                + " • Э " + (int) gs.energy() + "/" + (int) gs.maxEnergy() + " • Т" + gs.turretCount());
         lblBase.setTextColor(gs.baseHp <= gs.baseMaxHp * .3 ? Color.rgb(255, 74, 78) : CYAN);
         String weaponState = gs.manualReloading() ? "ПЕРЕЗАРЯДКА" : gs.manualOverheated() ? "ПЕРЕГРЕВ"
                 : "БОЕЗАПАС " + gs.manualAmmo() + "/" + gs.manualMagazineSize();

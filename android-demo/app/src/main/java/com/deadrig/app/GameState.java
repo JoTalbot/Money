@@ -23,6 +23,18 @@ public class GameState {
     public int minerLevel = 1;
     public int turretLevel = 1;
 
+    // --- углублённая экономика базы ---
+    private double energy = 100, maxEnergy = 100, fuel = 20;
+    private int generatorLevel = 1;
+    private double metal = 0, electronics = 0, biomass = 0;
+    private int collectorDroneLevel = 0;
+    private int activeContractType = -1;
+    private double contractTimer = 0;
+    private double investmentAmount = 0, investmentTimer = 0;
+    private double minerDurability = 100;
+    private int baseSpecialization = 0; // 0 нет, 1 майнинг, 2 оборона, 3 наука, 4 производство
+    private int networkNodes = 0;
+
     // --- ручное оружие оператора ---
     private int manualWeaponType = 0; // 0 пистолет, 1 автомат, 2 дробовик, 3 рельсотрон
     private int manualWeaponLevel = 1;
@@ -182,7 +194,90 @@ public class GameState {
     }
 
     // ===== формулы =====
-    public double miningRate() { return 1.0 * minerLevel * (1 + miningMult) * (1 + prestigeLevel * .5) * (1 + capturedNodes * .15); }
+    public double miningRate() {
+        double energyFactor = energy > 1 ? 1.0 : .35;
+        double durabilityFactor = .30 + .70 * Math.max(0, minerDurability) / 100.0;
+        double specialization = baseSpecialization == 1 ? 1.25 : 1.0;
+        return 1.0 * minerLevel * (1 + miningMult) * (1 + prestigeLevel * .5)
+                * (1 + capturedNodes * .15 + networkNodes * .10) * energyFactor * durabilityFactor * specialization;
+    }
+    public double energy() { return energy; }
+    public double maxEnergy() { return maxEnergy; }
+    public double fuel() { return fuel; }
+    public int generatorLevel() { return generatorLevel; }
+    public double metal() { return metal; }
+    public double electronics() { return electronics; }
+    public double biomass() { return biomass; }
+    public int collectorDroneLevel() { return collectorDroneLevel; }
+    public double minerDurability() { return minerDurability; }
+    public int baseSpecialization() { return baseSpecialization; }
+    public int networkNodes() { return networkNodes; }
+    public int contractSeconds() { return (int) Math.ceil(Math.max(0, contractTimer)); }
+    public int investmentSeconds() { return (int) Math.ceil(Math.max(0, investmentTimer)); }
+    public String specializationName() {
+        String[] names = {"Нет", "Майнинг", "Оборона", "Наука", "Производство"}; return names[baseSpecialization];
+    }
+    public String contractName() {
+        String[] names = {"Поставка металла", "Электронный заказ", "Биообразцы"};
+        return activeContractType < 0 ? "Нет" : names[activeContractType];
+    }
+    public String upgradeGenerator() {
+        double cost = 120 * Math.pow(1.7, generatorLevel - 1);
+        if (hashes < cost || metal < cost * .12) return "Нужно " + fmt(cost) + " хешей и " + fmt(cost * .12) + " металла";
+        hashes -= cost; metal -= cost * .12; generatorLevel++; maxEnergy += 35; energy = maxEnergy;
+        return "Генератор улучшен до уровня " + generatorLevel;
+    }
+    public String buyFuel() {
+        if (hashes < 60) return "Нужно 60 хешей";
+        hashes -= 60; fuel += 25; return "Получено 25 топлива";
+    }
+    public String upgradeCollectorDrone() {
+        double cost = 80 * Math.pow(1.8, collectorDroneLevel);
+        if (hashes < cost || electronics < collectorDroneLevel * 8) return "Не хватает хешей или электроники";
+        hashes -= cost; electronics -= collectorDroneLevel * 8; collectorDroneLevel++;
+        return "Дроны-сборщики: уровень " + collectorDroneLevel;
+    }
+    public String startProductionContract(int type) {
+        if (activeContractType >= 0) return "Контракт уже выполняется";
+        if (type < 0 || type > 2) return "Неизвестный контракт";
+        double material = type == 0 ? metal : type == 1 ? electronics : biomass;
+        double need = 25 + wave * 1.5;
+        if (material < need) return "Нужно " + fmt(need) + " ресурса";
+        if (type == 0) metal -= need; else if (type == 1) electronics -= need; else biomass -= need;
+        activeContractType = type; contractTimer = 90 + type * 45;
+        return "Контракт запущен: " + contractName();
+    }
+    public String tradeMarket(int type) {
+        double rate = 25 + ((System.currentTimeMillis() / 3600000L + type * 7) % 17);
+        if (hashes < rate) return "Нужно " + fmt(rate) + " хешей";
+        hashes -= rate;
+        if (type == 0) metal += 10; else if (type == 1) electronics += 8; else biomass += 12;
+        return "Сделка выполнена по курсу " + fmt(rate);
+    }
+    public String startInvestment() {
+        if (investmentTimer > 0) return "Инвестиция уже активна";
+        if (hashes < 150) return "Нужно 150 хешей";
+        hashes -= 150; investmentAmount = 150; investmentTimer = 75;
+        return "Рискованная инвестиция запущена";
+    }
+    public String repairMiner() {
+        if (minerDurability >= 100) return "Ферма исправна";
+        double cost = Math.ceil(100 - minerDurability);
+        if (metal < cost) return "Нужно " + fmt(cost) + " металла";
+        metal -= cost; minerDurability = 100; return "Майнинговое оборудование отремонтировано";
+    }
+    public String cycleSpecialization() {
+        int next = baseSpecialization % 4 + 1;
+        if (scrap < 120) return "Нужно 120 лома";
+        scrap -= 120; baseSpecialization = next; return "Специализация: " + specializationName();
+    }
+    public String buyNetworkNode() {
+        if (networkNodes >= 5) return "Сеть узлов заполнена";
+        double cost = 500 * Math.pow(2, networkNodes);
+        if (hashes < cost || electronics < 20 + networkNodes * 15) return "Не хватает хешей или электроники";
+        hashes -= cost; electronics -= 20 + networkNodes * 15; networkNodes++;
+        return "Подключён сетевой узел " + networkNodes + "/5";
+    }
     public int difficulty() { return difficulty; }
     public int waveModifier() { return waveModifier; }
     public int waveKind() { return waveKind; }
@@ -277,6 +372,8 @@ public class GameState {
         if (hashes < prestigeRequirement()) return "Нужно " + fmt(prestigeRequirement()) + " хешей";
         prestigeLevel++;
         hashes = 0; scrap = 0; minerLevel = 1; turretLevel = 1; manualWeaponLevel = 1;
+        energy = maxEnergy = 100; fuel = 20; generatorLevel = 1; metal = electronics = biomass = 0;
+        collectorDroneLevel = 0; activeContractType = -1; contractTimer = investmentAmount = investmentTimer = 0; minerDurability = 100;
         manualAmmo = manualMagazineSize(); manualHeat = 0; manualReloadTimer = 0; manualCombo = 0; ultimateCharge = 0;
         wave = 0; waveActive = false; waveModifier = waveKind = bossVariant = 0; zombies.clear(); projectiles.clear(); hitEffects.clear();
         mapId = floorLevel = gateMode = weatherType = 0; hazardType = 1; barricadeHp = 500; capturedNodes = 0; routeSeed += 911;
@@ -616,7 +713,7 @@ public class GameState {
         if (hashes < def.costHashes || scrap < def.costScrap)
             return "Нужно " + fmt(def.costHashes) + " хешей и " + fmt(def.costScrap) + " лома";
         hashes -= def.costHashes; scrap -= def.costScrap;
-        activeResearchId = def.id; activeResearchLeft = def.durationSec;
+        activeResearchId = def.id; activeResearchLeft = def.durationSec * (baseSpecialization == 3 ? .75 : 1.0);
         return "Начато: " + def.name;
     }
 
@@ -631,7 +728,7 @@ public class GameState {
                 anyUnlocked = true;
                 if (hashes < r.costHashes || scrap < r.costScrap) continue;
                 hashes -= r.costHashes; scrap -= r.costScrap;
-                activeCraftId = r.id; activeCraftLeft = r.durationSec;
+                activeCraftId = r.id; activeCraftLeft = r.durationSec * (baseSpecialization == 4 ? .72 : 1.0);
                 return "Производство: " + r.name;
             }
         }
@@ -643,7 +740,7 @@ public class GameState {
             anyUnlocked = true;
             if (hashes < r.costHashes || scrap < r.costScrap) continue;
             hashes -= r.costHashes; scrap -= r.costScrap;
-            activeCraftId = r.id; activeCraftLeft = r.durationSec;
+            activeCraftId = r.id; activeCraftLeft = r.durationSec * (baseSpecialization == 4 ? .72 : 1.0);
             return "Производство: " + r.name;
         }
         if (pendingTowerCount() > 0) return "Установите башню из резерва на площадку";
@@ -670,7 +767,7 @@ public class GameState {
         if (hashes < recipe.costHashes || scrap < recipe.costScrap)
             return "Нужно " + fmt(recipe.costHashes) + " хешей и " + fmt(recipe.costScrap) + " лома";
         hashes -= recipe.costHashes; scrap -= recipe.costScrap;
-        activeCraftId = recipe.id; activeCraftLeft = recipe.durationSec;
+        activeCraftId = recipe.id; activeCraftLeft = recipe.durationSec * (baseSpecialization == 4 ? .72 : 1.0);
         return "Производство: " + recipe.name;
     }
 
@@ -728,6 +825,33 @@ public class GameState {
         if (manualComboTimer > 0) {
             manualComboTimer -= dt;
             if (manualComboTimer <= 0) manualCombo = 0;
+        }
+        double energyUse = minerLevel * .08 + turretCount() * .28 + (activeResearchId != null ? .30 : 0);
+        double generated = generatorLevel * 1.5;
+        energy += (generated - energyUse) * dt;
+        if (energy < 5 && fuel > 0) { double burn = Math.min(fuel, .12 * dt); fuel -= burn; energy += burn * 28; }
+        energy = Math.max(0, Math.min(maxEnergy, energy));
+        if (collectorDroneLevel > 0) {
+            metal += collectorDroneLevel * .018 * dt;
+            electronics += collectorDroneLevel * .010 * dt;
+            biomass += collectorDroneLevel * .014 * dt;
+        }
+        if (contractTimer > 0) {
+            contractTimer -= dt;
+            if (contractTimer <= 0) {
+                hashes += 260 + activeContractType * 140; crystals += 1;
+                if (activeContractType == 0) electronics += 18;
+                else if (activeContractType == 1) biomass += 22;
+                else metal += 30;
+                activeContractType = -1; contractTimer = 0;
+            }
+        }
+        if (investmentTimer > 0) {
+            investmentTimer -= dt;
+            if (investmentTimer <= 0) {
+                double multiplier = .45 + Math.random() * 1.95;
+                hashes += investmentAmount * multiplier; investmentAmount = 0; investmentTimer = 0;
+            }
         }
         hashes += miningRate() * dt;
         if (weatherType == 2 && waveActive) baseHp = Math.max(0, baseHp - .08 * dt);
@@ -829,6 +953,10 @@ public class GameState {
                         * (waveKind == 2 ? 1.8 : waveKind == 1 ? 1.25 : 1.0) * (challengeMode > 0 ? 1.35 : 1.0);
                 hashes += 20.0 * wave * rewardMult;
                 scrap += 10.0 * wave * (1 + scrapMult) * rewardMult;
+                metal += (5 + wave * 1.4) * rewardMult;
+                electronics += (2 + wave * .65) * rewardMult;
+                biomass += (3 + wave * .9) * rewardMult;
+                minerDurability = Math.max(0, minerDurability - 1.5 - wave * .08);
                 nextWaveTimer = 5.0;
             }
         } else {
@@ -839,7 +967,7 @@ public class GameState {
         // Башни у дороги: дальность, скорострельность и урон зависят от исследований и типа.
         syncTurrets();
         for (Turret t : turrets) {
-            if (challengeMode == 1 || t.type == 6) continue; // поддержка усиливает соседей пассивно
+            if (challengeMode == 1 || t.type == 6 || energy <= .5) continue; // поддержка усиливает соседей пассивно
             t.cooldown -= dt;
             if (t.cooldown <= 0) {
                 Zombie target = findTarget(t, towerRangeAt(t.slot));
@@ -850,7 +978,8 @@ public class GameState {
                     double typeDamage = t.type == 5 ? 2.4 : t.type == 4 ? .72 : t.type == 3 ? 2.8 : t.type == 2 ? 2.0 : 1.0;
                     double branchDamage = t.branch == 1 ? 1.45 : 1.0;
                     double supportBoost = 1 + nearbySupportCount(t.x, t.y) * .18;
-                    double dmg = 10.0 * turretLevel * t.level * (1 + turretMult) * typeDamage * branchDamage * supportBoost;
+                    double specializationBoost = baseSpecialization == 2 ? 1.20 : 1.0;
+                    double dmg = 10.0 * turretLevel * t.level * (1 + turretMult) * typeDamage * branchDamage * supportBoost * specializationBoost;
                     double speed = t.type == 5 ? 8 : t.type == 3 ? 10 : t.type == 4 ? 12 : 14;
                     Projectile projectile = new Projectile(t.x, t.y, target, dmg, speed, t.type);
                     projectile.evolution = t.evolution;
@@ -1170,6 +1299,11 @@ public class GameState {
             o.put("crystals", crystals);
             o.put("minerLevel", minerLevel);
             o.put("turretLevel", turretLevel);
+            o.put("energy", energy); o.put("maxEnergy", maxEnergy); o.put("fuel", fuel); o.put("generatorLevel", generatorLevel);
+            o.put("metal", metal); o.put("electronics", electronics); o.put("biomass", biomass);
+            o.put("collectorDroneLevel", collectorDroneLevel); o.put("activeContractType", activeContractType);
+            o.put("contractTimer", contractTimer); o.put("investmentAmount", investmentAmount); o.put("investmentTimer", investmentTimer);
+            o.put("minerDurability", minerDurability); o.put("baseSpecialization", baseSpecialization); o.put("networkNodes", networkNodes);
             o.put("manualWeaponType", manualWeaponType);
             o.put("manualWeaponLevel", manualWeaponLevel);
             o.put("manualAmmo", manualAmmo);
@@ -1247,6 +1381,13 @@ public class GameState {
             crystals = o.getLong("crystals");
             minerLevel = o.getInt("minerLevel");
             turretLevel = o.getInt("turretLevel");
+            energy = o.optDouble("energy", 100); maxEnergy = o.optDouble("maxEnergy", 100); fuel = o.optDouble("fuel", 20);
+            generatorLevel = o.optInt("generatorLevel", 1); metal = o.optDouble("metal", 0);
+            electronics = o.optDouble("electronics", 0); biomass = o.optDouble("biomass", 0);
+            collectorDroneLevel = o.optInt("collectorDroneLevel", 0); activeContractType = o.optInt("activeContractType", -1);
+            contractTimer = o.optDouble("contractTimer", 0); investmentAmount = o.optDouble("investmentAmount", 0);
+            investmentTimer = o.optDouble("investmentTimer", 0); minerDurability = o.optDouble("minerDurability", 100);
+            baseSpecialization = o.optInt("baseSpecialization", 0); networkNodes = o.optInt("networkNodes", 0);
             manualWeaponType = o.optInt("manualWeaponType", 0);
             manualWeaponLevel = Math.max(1, o.optInt("manualWeaponLevel", 1));
             manualAmmo = o.optInt("manualAmmo", manualMagazineSize());
@@ -1340,6 +1481,9 @@ public class GameState {
 
     public void reset() {
         hashes = 0; scrap = 0; crystals = 0; minerLevel = 1; turretLevel = 1;
+        energy = maxEnergy = 100; fuel = 20; generatorLevel = 1; metal = electronics = biomass = 0;
+        collectorDroneLevel = 0; activeContractType = -1; contractTimer = investmentAmount = investmentTimer = 0;
+        minerDurability = 100; baseSpecialization = 0; networkNodes = 0;
         manualWeaponType = 0; manualWeaponLevel = 1; manualCooldown = 0; manualAmmo = 12;
         manualReloadTimer = 0; manualHeat = 0; manualOverheated = false; manualCombo = 0; manualComboTimer = 0;
         ownedWeaponMask = 1; damageModuleLevel = coolingModuleLevel = magazineModuleLevel = 0;
