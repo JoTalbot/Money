@@ -131,6 +131,27 @@ public final class ControlPanel {
         dialog.show(); fit(dialog);
     }
 
+    public static void showWaves(Activity activity, GameState state, OnChanged changed) {
+        Dialog dialog = create(activity, "КОМАНДОВАНИЕ ВОЛНАМИ", state.endlessMode() ? "Бесконечная оборона" : "Кампания: " + state.campaignName());
+        LinearLayout list = content(dialog);
+        addMetric(activity, list, "ТЕКУЩАЯ / РЕКОРД", state.wave + " / " + state.maxWaveReached());
+        addMetric(activity, list, "СЛОЖНОСТЬ", state.difficultyName());
+        addMetric(activity, list, "ИСПЫТАНИЕ", state.challengeName());
+        addMetric(activity, list, "ТИП ВОЛНЫ", state.waveKindName());
+        addMetric(activity, list, "МОДИФИКАТОР", state.waveModifierName());
+        addCard(activity, list, "Запустить следующую волну", "До автоматического старта: " + state.nextWaveSeconds()
+                        + " сек. Досрочный запуск выдаёт дополнительные хеши.", "ЗАПУСТИТЬ", !state.waveActive,
+                v -> result(activity, state.tryStartWave(), changed, dialog));
+        addCard(activity, list, "Изменить сложность", "Опасная и кошмарная сложность повышают HP, урон и награды.",
+                "СМЕНИТЬ", !state.waveActive, v -> result(activity, state.cycleDifficulty(), changed, dialog));
+        addCard(activity, list, "Испытание", "Только ручной бой, только башни или хрупкая база дают +35% наград.",
+                "СМЕНИТЬ", !state.waveActive, v -> result(activity, state.cycleChallenge(), changed, dialog));
+        addCard(activity, list, "Режим игры", state.endlessMode() ? "Сейчас: бесконечный" : "Сейчас: главы кампании",
+                "ПЕРЕКЛЮЧИТЬ", !state.waveActive, v -> result(activity, state.toggleEndless(), changed, dialog));
+        addHint(activity, list, "Каждая 5-я волна склонна к рою, каждая 7-я — к осаде. Боссы меняются каждые 10 волн и имеют три фазы.");
+        dialog.show(); fit(dialog);
+    }
+
     public static void showBestiary(Activity activity, GameState state, OnChanged changed) {
         Dialog dialog = create(activity, "ЭНЦИКЛОПЕДИЯ ЗАРАЖЁННЫХ", "Разведданные оборонного узла");
         LinearLayout list = content(dialog);

@@ -119,7 +119,7 @@ public class MainActivity extends Activity {
         panel.addView(button("Оборона", false, v -> ControlPanel.showDefense(this, gs, this::refreshHud)));
         panel.addView(button("Наука", false, v -> ControlPanel.showResearch(this, gs, this::refreshHud)));
         panel.addView(button("Цех", false, v -> ControlPanel.showWorkshop(this, gs, this::refreshHud)));
-        panel.addView(button("Волна", true, v -> act(gs.tryStartWave())));
+        panel.addView(button("Волна", true, v -> ControlPanel.showWaves(this, gs, this::refreshHud)));
         return panel;
     }
 
@@ -170,8 +170,8 @@ public class MainActivity extends Activity {
         lblHash.setText("ХЕШИ  " + GameState.fmt(gs.hashes));
         lblScrap.setText("ЛОМ  " + GameState.fmt(gs.scrap));
         lblCrystal.setText("КРИСТ.  " + gs.crystals);
-        lblWave.setText("ВОЛНА  " + gs.wave + (gs.waveActive ? (gs.wave > 0 && gs.wave % 10 == 0 ? "  // БОСС" : "  // АТАКА") : "")
-                + "  •  " + gs.weatherName().toUpperCase());
+        lblWave.setText("ВОЛНА " + gs.wave + (gs.waveActive ? (gs.wave > 0 && gs.wave % 10 == 0 ? " // БОСС" : " // " + gs.waveKindName().toUpperCase()) : "")
+                + " • " + gs.waveModifierName().toUpperCase() + " • " + gs.weatherName().toUpperCase());
         lblBase.setText("БАЗА  " + (int) Math.ceil(gs.baseHp) + "/" + (int) gs.baseMaxHp
                 + "  •  Т" + gs.turretCount());
         lblBase.setTextColor(gs.baseHp <= gs.baseMaxHp * .3 ? Color.rgb(255, 74, 78) : CYAN);

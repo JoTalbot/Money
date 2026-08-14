@@ -73,6 +73,14 @@ public class GameState {
     private double spawnTimer = 0;
     private double nextWaveTimer = 2.0;
     private boolean bossSpawnedThisWave = false;
+    private int difficulty = 0; // 0 обычная, 1 опасная, 2 кошмарная
+    private int waveModifier = 0; // 0 нет, 1 броня, 2 скорость, 3 реген, 4 туман, 5 ярость
+    private int waveKind = 0; // 0 обычная, 1 рой, 2 осада
+    private boolean endlessMode = false;
+    private int challengeMode = 0; // 0 нет, 1 только ручной бой, 2 только башни, 3 хрупкая база
+    private int maxWaveReached = 0;
+    private int bossVariant = 0;
+    private double earlyLaunchBonus = 0;
 
     // --- тактическая карта и окружение ---
     private int mapId = 0; // 0 бункер, 1 каньон, 2 лаборатория
@@ -175,6 +183,31 @@ public class GameState {
 
     // ===== формулы =====
     public double miningRate() { return 1.0 * minerLevel * (1 + miningMult) * (1 + prestigeLevel * .5) * (1 + capturedNodes * .15); }
+    public int difficulty() { return difficulty; }
+    public int waveModifier() { return waveModifier; }
+    public int waveKind() { return waveKind; }
+    public boolean endlessMode() { return endlessMode; }
+    public int challengeMode() { return challengeMode; }
+    public int maxWaveReached() { return maxWaveReached; }
+    public int bossVariant() { return bossVariant; }
+    public double earlyLaunchBonus() { return earlyLaunchBonus; }
+    public int nextWaveSeconds() { return (int) Math.ceil(Math.max(0, nextWaveTimer)); }
+    public int campaignChapter() { return Math.min(6, maxWaveReached / 10 + 1); }
+    public String difficultyName() { return difficulty == 2 ? "Кошмарная" : difficulty == 1 ? "Опасная" : "Обычная"; }
+    public String waveModifierName() {
+        String[] names = {"Без модификатора", "Усиленная броня", "Ускорение", "Регенерация", "Боевой туман", "Ярость"}; return names[waveModifier];
+    }
+    public String waveKindName() { return waveKind == 2 ? "Осада" : waveKind == 1 ? "Рой" : "Обычная"; }
+    public String challengeName() {
+        String[] names = {"Нет", "Только ручное оружие", "Только башни", "Хрупкая база"}; return names[challengeMode];
+    }
+    public String campaignName() {
+        String[] names = {"", "Пробуждение узла", "Красный каньон", "Падение лаборатории", "Глубокий сектор", "Источник сигнала", "Последний протокол"};
+        return names[campaignChapter()];
+    }
+    public String cycleDifficulty() { difficulty = (difficulty + 1) % 3; return "Сложность: " + difficultyName(); }
+    public String cycleChallenge() { challengeMode = (challengeMode + 1) % 4; return "Испытание: " + challengeName(); }
+    public String toggleEndless() { endlessMode = !endlessMode; return endlessMode ? "Бесконечный режим включён" : "Режим кампании включён"; }
     public int mapId() { return mapId; }
     public int floorLevel() { return floorLevel; }
     public int gateMode() { return gateMode; }
@@ -245,7 +278,7 @@ public class GameState {
         prestigeLevel++;
         hashes = 0; scrap = 0; minerLevel = 1; turretLevel = 1; manualWeaponLevel = 1;
         manualAmmo = manualMagazineSize(); manualHeat = 0; manualReloadTimer = 0; manualCombo = 0; ultimateCharge = 0;
-        wave = 0; waveActive = false; zombies.clear(); projectiles.clear(); hitEffects.clear();
+        wave = 0; waveActive = false; waveModifier = waveKind = bossVariant = 0; zombies.clear(); projectiles.clear(); hitEffects.clear();
         mapId = floorLevel = gateMode = weatherType = 0; hazardType = 1; barricadeHp = 500; capturedNodes = 0; routeSeed += 911;
         for (int i = 0; i < platformHealth.length; i++) platformHealth[i] = 100;
         basicTurrets = laserTurrets = teslaTurrets = cryoTurrets = rocketTurrets = supportTurrets = 0; mineCharges = 0;
@@ -322,6 +355,7 @@ public class GameState {
         if (towerBranchAt(slot) == 2) base += 1.5;
         if (towerEvolutionAt(slot) == 1 && type == 2) base += .8;
         if (weatherType == 1) base *= .78;
+        if (waveModifier == 4) base *= .72;
         return base;
     }
     public double towerUpgradeCost(int slot) { return 25.0 * Math.pow(towerLevelAt(slot), 1.65); }
@@ -473,7 +507,7 @@ public class GameState {
     /** Ручной выстрел с критами, попаданием в голову, магазином и перегревом. */
     public boolean manualShoot(Zombie target, boolean charged, boolean headshot, boolean preciseAim) {
         if (target == null || !zombies.contains(target) || manualCooldown > 0 || gameOver
-                || manualReloadTimer > 0 || manualOverheated) return false;
+                || manualReloadTimer > 0 || manualOverheated || challengeMode == 2) return false;
         if (manualAmmo <= 0) { startManualReload(); return false; }
 
         int weapon = WeaponCatalog.clamp(manualWeaponType);
@@ -558,8 +592,10 @@ public class GameState {
 
     public String tryStartWave() {
         if (waveActive) return "Волна уже идёт";
+        earlyLaunchBonus = Math.max(0, nextWaveTimer) * (5 + wave * .8);
+        if (earlyLaunchBonus > 0) hashes += earlyLaunchBonus;
         startWave();
-        return "Волна " + wave + " запущена";
+        return "Волна " + wave + " запущена" + (earlyLaunchBonus > 0 ? "  •  бонус +" + fmt(earlyLaunchBonus) : "");
     }
 
     public String tryStartResearch() {
@@ -703,6 +739,7 @@ public class GameState {
             if (z.burnTimer > 0) { z.burnTimer -= dt; z.hp -= z.burnDps * dt; }
             z.acidTimer = Math.max(0, z.acidTimer - dt);
             if (z.type == 5) z.hp = Math.min(z.maxHp, z.hp + z.maxHp * .018 * dt);
+            if (waveModifier == 3) z.hp = Math.min(z.maxHp, z.hp + z.maxHp * .007 * dt);
             if (z.eliteModifier == 1) z.hp = Math.min(z.maxHp, z.hp + z.maxHp * .008 * dt);
             if (z.type == 8) {
                 z.abilityCooldown -= dt;
@@ -711,13 +748,27 @@ public class GameState {
                     minion.pathIndex = z.pathIndex; summonedZombies.add(minion); z.summons++; z.abilityCooldown = 6.0;
                 }
             }
+            if (z.type == 4) {
+                double ratio = z.hp / z.maxHp;
+                int phase = ratio <= .15 ? 3 : ratio <= .40 ? 2 : ratio <= .70 ? 1 : 0;
+                if (phase > z.bossPhase) {
+                    z.bossPhase = phase;
+                    if (phase == 2) {
+                        for (int n = 0; n < 2; n++) {
+                            Zombie guard = new Zombie(z.x + (n == 0 ? -.4 : .4), z.y, z.maxHp * .09, 1.3, 9, z.pathId, bossVariant == 1 ? 2 : 0);
+                            guard.pathIndex = z.pathIndex; summonedZombies.add(guard);
+                        }
+                    }
+                    hitEffects.add(new HitEffect(z.x, z.y, bossVariant == 2 ? 19 : bossVariant == 1 ? 13 : 5));
+                }
+            }
             if (z.type == 9) {
                 for (int slot = 0; slot < TOWER_SLOTS.length; slot++)
                     if (placedTowerTypes[slot] != 0 && Math.hypot(z.x - TOWER_SLOTS[slot][0], z.y - TOWER_SLOTS[slot][1]) < 2.2)
                         platformDisabledTimer[slot] = Math.max(platformDisabledTimer[slot], 3.5);
             }
             if (z.pathIndex >= PATHS[z.pathId].length) {
-                baseHp -= z.damage;
+                baseHp -= z.damage * (challengeMode == 3 ? 2.0 : 1.0);
                 if (z.type == 10) {
                     baseHp -= 18;
                     for (int slot = 0; slot < platformHealth.length; slot++)
@@ -746,6 +797,9 @@ public class GameState {
             double speedMultiplier = z.slowTimer > 0 ? .48 : 1.0;
             if (weatherType == 3) speedMultiplier *= .82;
             if (z.eliteModifier == 2) speedMultiplier *= 1.38;
+            if (waveModifier == 2) speedMultiplier *= 1.30;
+            if (waveModifier == 5 && z.hp < z.maxHp * .5) speedMultiplier *= 1.45;
+            if (z.type == 4) speedMultiplier *= 1 + z.bossPhase * .18;
             double[] hazard = routePoint(z.pathId, 3);
             if (!flying && Math.hypot(z.x - hazard[0], z.y - hazard[1]) < 1.0) {
                 if (hazardType == 1) { z.burnTimer = Math.max(z.burnTimer, 1.2); z.burnDps = Math.max(z.burnDps, 8); }
@@ -764,15 +818,17 @@ public class GameState {
             if (spawnTimer <= 0 && zombiesToSpawn > 0) {
                 spawnZombie();
                 zombiesToSpawn--;
-                spawnTimer = 1.0;
+                spawnTimer = waveKind == 1 ? .38 : waveKind == 2 ? 1.35 : .75;
             }
             if (zombiesToSpawn <= 0 && zombies.isEmpty()) {
                 waveActive = false;
                 dailyWaves++;
                 int damagedSlot = (int) (Math.random() * TOWER_SLOTS.length);
                 if (placedTowerTypes[damagedSlot] != 0) platformHealth[damagedSlot] = Math.max(0, platformHealth[damagedSlot] - 15 - wave * .5);
-                hashes += 20.0 * wave;
-                scrap += 10.0 * wave * (1 + scrapMult);
+                double rewardMult = (difficulty == 2 ? 2.2 : difficulty == 1 ? 1.5 : 1.0)
+                        * (waveKind == 2 ? 1.8 : waveKind == 1 ? 1.25 : 1.0) * (challengeMode > 0 ? 1.35 : 1.0);
+                hashes += 20.0 * wave * rewardMult;
+                scrap += 10.0 * wave * (1 + scrapMult) * rewardMult;
                 nextWaveTimer = 5.0;
             }
         } else {
@@ -783,7 +839,7 @@ public class GameState {
         // Башни у дороги: дальность, скорострельность и урон зависят от исследований и типа.
         syncTurrets();
         for (Turret t : turrets) {
-            if (t.type == 6) continue; // поддержка усиливает соседей пассивно
+            if (challengeMode == 1 || t.type == 6) continue; // поддержка усиливает соседей пассивно
             t.cooldown -= dt;
             if (t.cooldown <= 0) {
                 Zombie target = findTarget(t, towerRangeAt(t.slot));
@@ -934,9 +990,16 @@ public class GameState {
 
     private void startWave() {
         wave++;
-        zombiesToSpawn = 5 + wave * 3;
-        spawnTimer = 0.5;
+        maxWaveReached = Math.max(maxWaveReached, wave);
+        if (wave % 7 == 0) waveKind = 2;
+        else if (wave % 5 == 0) waveKind = 1;
+        else waveKind = Math.random() < .16 ? 1 + (int) (Math.random() * 2) : 0;
+        int baseCount = 5 + wave * 3;
+        zombiesToSpawn = waveKind == 1 ? (int) (baseCount * 2.4) : waveKind == 2 ? Math.max(3, baseCount / 3) : baseCount;
+        spawnTimer = waveKind == 1 ? .38 : waveKind == 2 ? 1.35 : .75;
         bossSpawnedThisWave = false;
+        bossVariant = Math.max(0, (wave / 10 - 1) % 3);
+        waveModifier = wave >= 3 && Math.random() < .72 ? 1 + (int) (Math.random() * 5) : 0;
         weatherType = (wave + mapId + (int) (Math.random() * 3)) % 5;
         waveActive = true;
     }
@@ -971,7 +1034,16 @@ public class GameState {
                 : type == 11 ? 1.1 : type == 12 ? 1.6 : type == 3 ? 1.08 : type == 1 ? 1.82 : 1.25;
         double damage = type == 4 ? 35 : type == 10 ? 20 : type == 3 ? 14 : type == 2 || type == 8 ? 12
                 : type == 5 || type == 11 ? 10 : type == 6 || type == 7 ? 9 : type == 9 ? 7 : type == 1 ? 6 : type == 12 ? 5 : 8;
-        Zombie zombie = new Zombie(sx, sy, baseHp * hpMult, speed, damage, pathId, type);
+        double difficultyHp = difficulty == 2 ? 2.15 : difficulty == 1 ? 1.45 : 1.0;
+        double difficultyDamage = difficulty == 2 ? 1.75 : difficulty == 1 ? 1.30 : 1.0;
+        if (waveKind == 1) { hpMult *= .55; damage *= .75; }
+        else if (waveKind == 2) { hpMult *= 3.2; damage *= 1.6; speed *= .82; }
+        if (waveModifier == 1) hpMult *= 1.6;
+        if (type == 4) {
+            if (bossVariant == 1) { hpMult *= 1.25; speed *= .82; }
+            else if (bossVariant == 2) { damage *= 1.25; speed *= 1.12; }
+        }
+        Zombie zombie = new Zombie(sx, sy, baseHp * hpMult * difficultyHp, speed, damage * difficultyDamage, pathId, type);
         if (type == 11) zombie.pathIndex = 3;
         if (type == 8) zombie.abilityCooldown = 4.0;
         if (type != 4 && wave >= 8 && Math.random() < Math.min(.28, .07 + wave * .004))
@@ -1129,6 +1201,9 @@ public class GameState {
             o.put("baseHp", baseHp);
             o.put("baseMaxHp", baseMaxHp);
             o.put("wave", wave);
+            o.put("difficulty", difficulty); o.put("waveModifier", waveModifier); o.put("waveKind", waveKind);
+            o.put("endlessMode", endlessMode); o.put("challengeMode", challengeMode); o.put("maxWaveReached", maxWaveReached);
+            o.put("bossVariant", bossVariant); o.put("earlyLaunchBonus", earlyLaunchBonus);
             o.put("mapId", mapId); o.put("floorLevel", floorLevel); o.put("gateMode", gateMode);
             o.put("weatherType", weatherType); o.put("hazardType", hazardType); o.put("routeSeed", routeSeed);
             o.put("barricadeHp", barricadeHp); o.put("capturedNodes", capturedNodes);
@@ -1206,6 +1281,10 @@ public class GameState {
             baseHp = o.getDouble("baseHp");
             baseMaxHp = o.getDouble("baseMaxHp");
             wave = o.getInt("wave");
+            difficulty = o.optInt("difficulty", 0); waveModifier = o.optInt("waveModifier", 0); waveKind = o.optInt("waveKind", 0);
+            endlessMode = o.optBoolean("endlessMode", false); challengeMode = o.optInt("challengeMode", 0);
+            maxWaveReached = o.optInt("maxWaveReached", wave); bossVariant = o.optInt("bossVariant", 0);
+            earlyLaunchBonus = o.optDouble("earlyLaunchBonus", 0);
             mapId = o.optInt("mapId", 0); floorLevel = o.optInt("floorLevel", 0); gateMode = o.optInt("gateMode", 0);
             weatherType = o.optInt("weatherType", 0); hazardType = o.optInt("hazardType", 1);
             routeSeed = o.optLong("routeSeed", 7331); barricadeHp = o.optDouble("barricadeHp", 500);
@@ -1277,6 +1356,8 @@ public class GameState {
         for (int i = 0; i < platformHealth.length; i++) { platformHealth[i] = 100; platformDisabledTimer[i] = 0; }
         for (int i = 0; i < EnemyCatalog.COUNT; i++) { enemyKills[i] = 0; enemySeen[i] = false; }
         wave = 0; waveActive = false; zombiesToSpawn = 0; spawnTimer = 0; nextWaveTimer = 2.0;
+        difficulty = waveModifier = waveKind = challengeMode = maxWaveReached = bossVariant = 0;
+        endlessMode = false; earlyLaunchBonus = 0;
         zombies.clear(); projectiles.clear(); hitEffects.clear(); turrets.clear();
         basicTurrets = 0; laserTurrets = 0; teslaTurrets = 0; cryoTurrets = 0; rocketTurrets = 0; supportTurrets = 0;
         mineCharges = 0; mineCooldown = 0; fireRateMult = 0; rangeBonus = 0;
@@ -1321,7 +1402,7 @@ public class GameState {
     // ===== сущности =====
     public static class Zombie {
         double x, y, hp, maxHp, speed, damage, slowTimer, burnTimer, burnDps, acidTimer, abilityCooldown;
-        int pathId, pathIndex = 1, type, eliteModifier, summons;
+        int pathId, pathIndex = 1, type, eliteModifier, summons, bossPhase;
         boolean lastHitManual;
         Zombie(double x, double y, double hp, double speed, double damage, int pathId, int type) {
             this.x = x; this.y = y; this.hp = hp; this.maxHp = hp; this.speed = speed; this.damage = damage;

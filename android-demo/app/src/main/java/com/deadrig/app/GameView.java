@@ -451,6 +451,8 @@ public class GameView extends View {
     }
 
     private int enemyBodyColor(int type) {
+        if (type == 4) return gs.bossVariant() == 2 ? Color.rgb(102, 124, 43)
+                : gs.bossVariant() == 1 ? Color.rgb(58, 75, 94) : Color.rgb(103, 48, 52);
         int[] colors = {Color.rgb(67,94,76), Color.rgb(72,115,86), Color.rgb(68,78,83), Color.rgb(75,91,43),
                 Color.rgb(103,48,52), Color.rgb(61,128,76), Color.rgb(73,105,116), Color.rgb(48,91,121),
                 Color.rgb(91,52,111), Color.rgb(49,105,102), Color.rgb(124,52,38), Color.rgb(105,76,48), Color.rgb(130,108,42)};
@@ -500,6 +502,10 @@ public class GameView extends View {
             stroke.setColor(Color.rgb(193, 96, 255)); stroke.setStrokeWidth(s * .08f); c.drawCircle(p.x, p.y - s * 1.15f, s * .55f, stroke);
         }
         if (z.type == 10) { paint.setColor(Color.rgb(255, 70, 42)); c.drawCircle(p.x, p.y - s * .1f, s * .28f, paint); }
+        if (z.type == 4 && z.bossPhase > 0) {
+            stroke.setColor(Color.argb(200, 255, 62 + z.bossPhase * 35, 50)); stroke.setStrokeWidth(s * .08f);
+            c.drawCircle(p.x, p.y - s * .4f, s * (1.05f + z.bossPhase * .12f), stroke);
+        }
         if (z.eliteModifier > 0) {
             int eliteColor = z.eliteModifier == 1 ? Color.rgb(230, 64, 86) : z.eliteModifier == 2 ? Color.rgb(255, 205, 62)
                     : z.eliteModifier == 3 ? Color.rgb(125, 185, 210) : Color.rgb(213, 126, 255);
