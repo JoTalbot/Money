@@ -35,10 +35,12 @@ public class GameState {
     private int zombiesToSpawn = 0;
     private double spawnTimer = 0;
     private double nextWaveTimer = 2.0;
+    private boolean bossSpawnedThisWave = false;
 
     // --- сущности ---
     public final List<Zombie> zombies = new ArrayList<>();
     public final List<Projectile> projectiles = new ArrayList<>();
+    public final List<HitEffect> hitEffects = new ArrayList<>();
     public final List<Turret> turrets = new ArrayList<>();
 
     /** Извилистые маршруты из четырёх порталов к ядру базы. */
@@ -350,13 +352,25 @@ public class GameState {
             double dx = p.target.x - p.x, dy = p.target.y - p.y;
             double d = Math.hypot(dx, dy);
             if (d < 0.35) {
-                p.target.hp -= p.damage;
+                double resistance = 1.0;
+                if (p.target.type == 2 && p.type == 1) resistance = .55; // броня держит пули
+                if (p.target.type == 1 && p.type == 2) resistance = 1.20; // лазер эффективен против бегунов
+                if (p.target.type == 3 && p.type == 3) resistance = .80; // токсичная плоть гасит разряд
+                if (p.target.type == 4 && p.type == 3) resistance = 1.15;
+                p.target.hp -= p.damage * resistance;
+                hitEffects.add(new HitEffect(p.x, p.y, p.type));
                 projectiles.remove(i);
                 if (p.target.hp <= 0) zombies.remove(p.target);
                 continue;
             }
             p.x += dx / d * p.speed * dt;
             p.y += dy / d * p.speed * dt;
+        }
+
+        for (int i = hitEffects.size() - 1; i >= 0; i--) {
+            HitEffect effect = hitEffects.get(i);
+            effect.life -= dt;
+            if (effect.life <= 0) hitEffects.remove(i);
         }
 
         // исследование
@@ -376,6 +390,7 @@ public class GameState {
         wave++;
         zombiesToSpawn = 5 + wave * 3;
         spawnTimer = 0.5;
+        bossSpawnedThisWave = false;
         waveActive = true;
     }
 
@@ -383,8 +398,19 @@ public class GameState {
         int pathId = (int) (Math.random() * PATHS.length);
         double sx = PATHS[pathId][0][0] + (Math.random() - .5) * .22;
         double sy = PATHS[pathId][0][1] + (Math.random() - .5) * .22;
-        double hp = 10.0 * Math.pow(1.25, wave - 1);
-        zombies.add(new Zombie(sx, sy, hp, 1.25, 8.0, pathId));
+        int type = 0;
+        if (wave % 10 == 0 && !bossSpawnedThisWave) { type = 4; bossSpawnedThisWave = true; }
+        else {
+            double roll = Math.random();
+            if (wave >= 7 && roll < .12) type = 3;
+            else if (wave >= 4 && roll < .30) type = 2;
+            else if (wave >= 2 && roll < .52) type = 1;
+        }
+        double baseHp = 10.0 * Math.pow(1.25, wave - 1);
+        double hpMult = type == 4 ? 12.0 : type == 2 ? 2.5 : type == 3 ? 1.35 : type == 1 ? .68 : 1.0;
+        double speed = type == 4 ? .72 : type == 2 ? .88 : type == 3 ? 1.08 : type == 1 ? 1.82 : 1.25;
+        double damage = type == 4 ? 35 : type == 3 ? 14 : type == 2 ? 12 : type == 1 ? 6 : 8;
+        zombies.add(new Zombie(sx, sy, baseHp * hpMult, speed, damage, pathId, type));
     }
 
     private Zombie nearestZombie(double x, double y, double range) {
@@ -529,7 +555,7 @@ public class GameState {
         miningMult = 0; turretMult = 0; scrapMult = 0;
         baseHp = 100; baseMaxHp = 100;
         wave = 0; waveActive = false; zombiesToSpawn = 0; spawnTimer = 0; nextWaveTimer = 2.0;
-        zombies.clear(); projectiles.clear(); turrets.clear();
+        zombies.clear(); projectiles.clear(); hitEffects.clear(); turrets.clear();
         basicTurrets = 0; laserTurrets = 0; teslaTurrets = 0;
         fireRateMult = 0; rangeBonus = 0;
         for (int i = 0; i < placedTowerTypes.length; i++) { placedTowerTypes[i] = 0; towerLevels[i] = 0; }
@@ -570,12 +596,18 @@ public class GameState {
 
     // ===== сущности =====
     public static class Zombie {
-        double x, y, hp, speed, damage;
-        int pathId, pathIndex = 1;
-        Zombie(double x, double y, double hp, double speed, double damage, int pathId) {
-            this.x = x; this.y = y; this.hp = hp; this.speed = speed; this.damage = damage;
-            this.pathId = pathId;
+        double x, y, hp, maxHp, speed, damage;
+        int pathId, pathIndex = 1, type;
+        Zombie(double x, double y, double hp, double speed, double damage, int pathId, int type) {
+            this.x = x; this.y = y; this.hp = hp; this.maxHp = hp; this.speed = speed; this.damage = damage;
+            this.pathId = pathId; this.type = type;
         }
+    }
+
+    public static class HitEffect {
+        double x, y, life = .28;
+        int type;
+        HitEffect(double x, double y, int type) { this.x = x; this.y = y; this.type = type; }
     }
 
     public static class Projectile {

@@ -78,6 +78,7 @@ public class GameView extends View {
         drawSpawnRifts(c);
         drawSortedActors(c);
         drawProjectiles(c);
+        drawHitEffects(c);
         drawVignette(c, w, h);
         // 30 FPS достаточно для idle/tower-defense и не блокирует обработку нажатий HUD.
         postInvalidateDelayed(33);
@@ -327,28 +328,37 @@ public class GameView extends View {
 
     private void drawZombie(Canvas c, GameState.Zombie z) {
         PointF p = iso(z.x, z.y);
-        float s = unit * .38f;
-        paint.setColor(Color.argb(90, 0, 0, 0)); c.drawOval(p.x - s, p.y + s * .55f, p.x + s, p.y + s * .9f, paint);
-        // Ноги.
+        float scale = z.type == 4 ? .72f : z.type == 2 ? .48f : z.type == 1 ? .32f : .38f;
+        float s = unit * scale;
+        int body = z.type == 4 ? Color.rgb(103, 48, 52) : z.type == 3 ? Color.rgb(75, 91, 43)
+                : z.type == 2 ? Color.rgb(68, 78, 83) : z.type == 1 ? Color.rgb(72, 115, 86) : Color.rgb(67, 94, 76);
+        int armor = z.type == 4 ? Color.rgb(175, 52, 43) : z.type == 3 ? Color.rgb(150, 174, 43)
+                : z.type == 2 ? Color.rgb(105, 120, 126) : ORANGE;
+        paint.setColor(Color.argb(100, 0, 0, 0)); c.drawOval(p.x - s, p.y + s * .55f, p.x + s, p.y + s * .9f, paint);
         stroke.setStrokeWidth(s * .34f); stroke.setColor(Color.rgb(29, 43, 48));
         c.drawLine(p.x - s * .18f, p.y + s * .18f, p.x - s * .32f, p.y + s * .72f, stroke);
         c.drawLine(p.x + s * .18f, p.y + s * .18f, p.x + s * .32f, p.y + s * .72f, stroke);
-        // Тело и жилет.
-        paint.setColor(Color.rgb(67, 94, 76));
-        diamond(c, p.x, p.y - s * .18f, s * .66f, s * .58f, paint);
-        paint.setColor(ORANGE);
-        triangle(c, p.x - s * .48f, p.y - s * .24f, p.x, p.y + s * .38f,
-                p.x, p.y - s * .07f, paint);
-        paint.setColor(Color.rgb(177, 82, 24));
-        triangle(c, p.x + s * .48f, p.y - s * .24f, p.x, p.y + s * .38f,
-                p.x, p.y - s * .07f, paint);
-        // Голова.
+        paint.setColor(body); diamond(c, p.x, p.y - s * .18f, s * .66f, s * .58f, paint);
+        paint.setColor(armor);
+        triangle(c, p.x - s * .48f, p.y - s * .24f, p.x, p.y + s * .38f, p.x, p.y - s * .07f, paint);
+        paint.setColor(z.type == 3 ? Color.rgb(85, 114, 35) : Color.rgb(137, 67, 28));
+        triangle(c, p.x + s * .48f, p.y - s * .24f, p.x, p.y + s * .38f, p.x, p.y - s * .07f, paint);
         prism(c, p.x, p.y - s * 1.12f, s * .48f, s * .26f, s * .65f,
-                Color.rgb(111, 144, 103), Color.rgb(74, 108, 82), Color.rgb(56, 88, 69));
-        paint.setColor(Color.rgb(210, 255, 105)); c.drawCircle(p.x - s * .18f, p.y - s * .93f, s * .10f, paint);
+                z.type == 4 ? Color.rgb(148, 70, 68) : z.type == 3 ? Color.rgb(128, 153, 68) : Color.rgb(111, 144, 103),
+                Color.rgb(74, 108, 82), Color.rgb(56, 88, 69));
+        paint.setColor(z.type == 3 ? Color.rgb(191, 255, 56) : Color.rgb(210, 255, 105));
+        c.drawCircle(p.x - s * .18f, p.y - s * .93f, s * .10f, paint);
         paint.setColor(RED); c.drawCircle(p.x + s * .20f, p.y - s * .93f, s * .11f, paint);
-        stroke.setColor(Color.argb(180, 255, 70, 66)); stroke.setStrokeWidth(s * .04f);
-        c.drawLine(p.x + s * .22f, p.y - s * .94f, p.x + s * .72f, p.y - s * 1.15f, stroke);
+        if (z.type == 2 || z.type == 4) {
+            stroke.setColor(z.type == 4 ? RED : Color.rgb(157, 185, 190)); stroke.setStrokeWidth(s * .10f);
+            c.drawLine(p.x - s * .58f, p.y - s * .45f, p.x + s * .58f, p.y - s * .45f, stroke);
+        }
+        if (z.type != 0 || z.hp < z.maxHp) {
+            float health = (float) Math.max(0, z.hp / z.maxHp);
+            paint.setColor(Color.rgb(9, 16, 18)); c.drawRect(p.x - s, p.y - s * 1.72f, p.x + s, p.y - s * 1.57f, paint);
+            paint.setColor(z.type == 4 ? RED : Color.rgb(102, 224, 109));
+            c.drawRect(p.x - s, p.y - s * 1.72f, p.x - s + 2 * s * health, p.y - s * 1.57f, paint);
+        }
     }
 
     private void drawProjectiles(Canvas c) {
@@ -360,6 +370,24 @@ public class GameView extends View {
                     glow, Color.TRANSPARENT, Shader.TileMode.CLAMP));
             c.drawCircle(q.x, q.y - unit * .18f, r * 3f, paint); paint.setShader(null);
             paint.setColor(Color.WHITE); c.drawCircle(q.x, q.y - unit * .18f, r, paint);
+        }
+    }
+
+    private void drawHitEffects(Canvas c) {
+        for (GameState.HitEffect effect : gs.hitEffects) {
+            PointF p = iso(effect.x, effect.y);
+            float progress = (float) (effect.life / .28);
+            float radius = unit * (.18f + (1f - progress) * .55f);
+            int color = effect.type == 3 ? Color.rgb(211, 104, 255) : effect.type == 2 ? CYAN : ORANGE;
+            stroke.setColor(Color.argb((int) (220 * progress), Color.red(color), Color.green(color), Color.blue(color)));
+            stroke.setStrokeWidth(unit * .07f * progress);
+            c.drawCircle(p.x, p.y - unit * .25f, radius, stroke);
+            for (int i = 0; i < 4; i++) {
+                double angle = i * Math.PI / 2 + (1 - progress);
+                c.drawLine(p.x, p.y - unit * .25f,
+                        p.x + (float) Math.cos(angle) * radius * 1.4f,
+                        p.y - unit * .25f + (float) Math.sin(angle) * radius * .8f, stroke);
+            }
         }
     }
 
