@@ -78,11 +78,12 @@ public final class ControlPanel {
                 "Повышает базовый урон всего оборонного контура.\nСтоимость: " + GameState.fmt(state.turretUpgradeCost()) + " хешей",
                 "УСИЛИТЬ", true, v -> result(activity, state.tryUpgradeTurret(), changed, dialog));
 
-        String[] names = {"", "Пулемётная", "Лазерная", "Тесла"};
+        String[] names = {"", "Пулемётная", "Лазерная", "Тесла", "Крио"};
         for (int i = 0; i < GameState.TOWER_SLOTS.length; i++) {
             int type = state.towerTypeAt(i);
             if (type != 0) addCard(activity, list, "Площадка " + (i + 1) + "  //  " + names[type],
-                    type == 1 ? "Высокий темп, стандартный урон" : type == 2 ? "Двойной урон и повышенная дальность" : "Тяжёлый энергетический импульс",
+                    type == 1 ? "Высокий темп, стандартный урон" : type == 2 ? "Двойной урон и повышенная дальность"
+                            : type == 3 ? "Цепная молния по группе" : "Замедляет врагов крио-зарядами",
                     null, false, null);
         }
         addHint(activity, list, "Чтобы установить башню из резерва, закройте экран и нажмите на светящуюся свободную площадку у дороги.");
@@ -92,7 +93,7 @@ public final class ControlPanel {
     public static void showTower(Activity activity, GameState state, int slot, OnChanged changed) {
         int type = state.towerTypeAt(slot);
         if (type == 0) return;
-        String[] names = {"", "ПУЛЕМЁТНАЯ БАШНЯ", "ЛАЗЕРНАЯ БАШНЯ", "ТЕСЛА-БАШНЯ"};
+        String[] names = {"", "ПУЛЕМЁТНАЯ БАШНЯ", "ЛАЗЕРНАЯ БАШНЯ", "ТЕСЛА-БАШНЯ", "КРИО-БАШНЯ"};
         Dialog dialog = create(activity, names[type], "Монтажная площадка " + (slot + 1));
         LinearLayout list = content(dialog);
         addMetric(activity, list, "ЛОКАЛЬНЫЙ УРОВЕНЬ", String.valueOf(state.towerLevelAt(slot)));
@@ -161,7 +162,8 @@ public final class ControlPanel {
     private static String recipeDescription(String item) {
         if ("turret_basic".equals(item)) return "Быстрая универсальная башня";
         if ("turret_laser".equals(item)) return "Двойной урон и увеличенная дальность";
-        if ("turret_tesla".equals(item)) return "Тяжёлый энергетический разряд";
+        if ("turret_tesla".equals(item)) return "Цепная молния поражает до трёх целей";
+        if ("turret_cryo".equals(item)) return "Замедляет врага на 52% на 3.2 секунды";
         if ("turret_module".equals(item)) return "+1 к общему уровню всех башен";
         if ("wall".equals(item)) return "+20 к максимальному HP базы и ремонт";
         if ("weapon_auto".equals(item)) return "Высокий темп ручного огня при удержании";

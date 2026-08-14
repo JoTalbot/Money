@@ -346,7 +346,7 @@ public class GameView extends View {
         paint.setColor(Color.argb(90, 0, 0, 0)); c.drawOval(p.x - s, p.y + s * .72f, p.x + s, p.y + s * 1.08f, paint);
         prism(c, p.x, p.y + s * .42f, s, s * .48f, s * .50f,
                 Color.rgb(77, 94, 97), Color.rgb(37, 53, 56), Color.rgb(27, 43, 46));
-        int towerTop = t.type == 3 ? Color.rgb(113, 73, 145)
+        int towerTop = t.type == 4 ? Color.rgb(74, 151, 172) : t.type == 3 ? Color.rgb(113, 73, 145)
                 : t.type == 2 ? Color.rgb(71, 84, 132) : Color.rgb(91, 107, 108);
         prism(c, p.x, p.y - s * .10f, s * .72f, s * .35f, s * .68f,
                 towerTop, Color.rgb(43, 56, 62), Color.rgb(30, 44, 49));
@@ -358,7 +358,7 @@ public class GameView extends View {
         dx /= len; dy /= len;
         stroke.setStrokeWidth(s * .22f); stroke.setColor(Color.rgb(18, 28, 32));
         c.drawLine(p.x, p.y - s * .52f, p.x + dx * s * 1.35f, p.y - s * .52f + dy * s * 1.35f, stroke);
-        int energyColor = t.type == 3 ? Color.rgb(206, 105, 255) : t.type == 2 ? CYAN : ORANGE;
+        int energyColor = t.type == 4 ? Color.rgb(118, 222, 255) : t.type == 3 ? Color.rgb(206, 105, 255) : t.type == 2 ? CYAN : ORANGE;
         stroke.setStrokeWidth(s * .08f); stroke.setColor(energyColor);
         c.drawLine(p.x + dx * s, p.y - s * .52f + dy * s, p.x + dx * s * 1.4f, p.y - s * .52f + dy * s * 1.4f, stroke);
         paint.setColor(energyColor); c.drawCircle(p.x, p.y - s * .75f, s * .16f, paint);
@@ -403,6 +403,10 @@ public class GameView extends View {
             paint.setColor(z.type == 4 ? RED : Color.rgb(102, 224, 109));
             c.drawRect(p.x - s, p.y - s * 1.72f, p.x - s + 2 * s * health, p.y - s * 1.57f, paint);
         }
+        if (z.slowTimer > 0) {
+            stroke.setColor(Color.argb(190, 118, 222, 255)); stroke.setStrokeWidth(s * .08f);
+            c.drawCircle(p.x, p.y - s * .35f, s * .92f, stroke);
+        }
     }
 
     private void drawProjectiles(Canvas c) {
@@ -411,7 +415,7 @@ public class GameView extends View {
             float r = unit * (p.type == 3 || p.type == 13 ? .18f : .13f);
             int glow = p.type == 13 ? Color.rgb(220, 246, 255) : p.type == 12 ? Color.rgb(160, 255, 104)
                     : p.type == 11 ? Color.rgb(255, 187, 65) : p.type == 10 ? Color.rgb(255, 231, 118)
-                    : p.type == 3 ? Color.rgb(212, 104, 255) : p.type == 2 ? CYAN : ORANGE;
+                    : p.type == 4 ? Color.rgb(118, 222, 255) : p.type == 3 ? Color.rgb(212, 104, 255) : p.type == 2 ? CYAN : ORANGE;
             paint.setShader(new RadialGradient(q.x, q.y - unit * .18f, r * 3f,
                     glow, Color.TRANSPARENT, Shader.TileMode.CLAMP));
             c.drawCircle(q.x, q.y - unit * .18f, r * 3f, paint); paint.setShader(null);
@@ -426,7 +430,7 @@ public class GameView extends View {
             float radius = unit * (.18f + (1f - progress) * .55f);
             int color = effect.type == 13 ? Color.WHITE : effect.type == 12 ? Color.rgb(160, 255, 104)
                     : effect.type >= 10 ? Color.rgb(255, 205, 83)
-                    : effect.type == 3 ? Color.rgb(211, 104, 255) : effect.type == 2 ? CYAN : ORANGE;
+                    : effect.type == 4 ? Color.rgb(118, 222, 255) : effect.type == 3 ? Color.rgb(211, 104, 255) : effect.type == 2 ? CYAN : ORANGE;
             stroke.setColor(Color.argb((int) (220 * progress), Color.red(color), Color.green(color), Color.blue(color)));
             stroke.setStrokeWidth(unit * .07f * progress);
             c.drawCircle(p.x, p.y - unit * .25f, radius, stroke);

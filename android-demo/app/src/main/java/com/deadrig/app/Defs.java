@@ -44,6 +44,9 @@ public class Defs {
         r = new ResearchDef(); r.id = "r_tesla"; r.name = "Катушка Теслы"; r.desc = "Открывает тяжёлую тесла-башню";
         r.requiresId = "r_range"; r.costHashes = 800; r.costScrap = 220; r.durationSec = 480; r.effectType = -1; RESEARCH.add(r);
 
+        r = new ResearchDef(); r.id = "r_cryo"; r.name = "Криогенный контур"; r.desc = "Открывает замедляющую крио-башню";
+        r.requiresId = "r_range"; r.costHashes = 650; r.costScrap = 190; r.durationSec = 420; r.effectType = -1; RESEARCH.add(r);
+
         r = new ResearchDef(); r.id = "r_module"; r.name = "Модульная оборона"; r.desc = "Открывает крафт комплекта усиления";
         r.requiresId = "r_dmg"; r.costHashes = 380; r.costScrap = 100; r.durationSec = 260; r.effectType = -1; RESEARCH.add(r);
 
@@ -69,6 +72,9 @@ public class Defs {
 
         c = new RecipeDef(); c.id = "turret_tesla"; c.name = "Тесла-башня"; c.outItem = "turret_tesla";
         c.requiresResearchId = "r_tesla"; c.costHashes = 300; c.costScrap = 130; c.durationSec = 150; RECIPES.add(c);
+
+        c = new RecipeDef(); c.id = "turret_cryo"; c.name = "Крио-башня"; c.outItem = "turret_cryo";
+        c.requiresResearchId = "r_cryo"; c.costHashes = 260; c.costScrap = 120; c.durationSec = 135; RECIPES.add(c);
 
         c = new RecipeDef(); c.id = "turret_module"; c.name = "Комплект усиления"; c.outItem = "turret_module";
         c.requiresResearchId = "r_module"; c.costHashes = 180; c.costScrap = 75; c.durationSec = 100; RECIPES.add(c);

@@ -67,6 +67,7 @@ public class GameState {
     private int basicTurrets = 0;
     private int laserTurrets = 0;
     private int teslaTurrets = 0;
+    private int cryoTurrets = 0;
     private double fireRateMult = 0;
     private double rangeBonus = 0;
 
@@ -114,7 +115,7 @@ public class GameState {
     public double manualUpgradeCost() { return 20.0 * Math.pow(1.7, manualWeaponLevel - 1); }
     public int turretCount() { return placedTowerCount(); }
     public int pendingTowerCount() {
-        return Math.max(0, 1 + basicTurrets + laserTurrets + teslaTurrets - placedTowerCount());
+        return Math.max(0, 1 + basicTurrets + laserTurrets + teslaTurrets + cryoTurrets - placedTowerCount());
     }
     public int towerTypeAt(int slot) {
         return slot >= 0 && slot < placedTowerTypes.length ? placedTowerTypes[slot] : 0;
@@ -143,21 +144,24 @@ public class GameState {
             syncTurrets();
             return "Башня перемещена";
         }
-        int placedBasic = 0, placedLaser = 0, placedTesla = 0;
+        int placedBasic = 0, placedLaser = 0, placedTesla = 0, placedCryo = 0;
         for (int type : placedTowerTypes) {
             if (type == 1) placedBasic++;
             else if (type == 2) placedLaser++;
             else if (type == 3) placedTesla++;
+            else if (type == 4) placedCryo++;
         }
         int type = 0;
-        if (placedTesla < teslaTurrets) type = 3;
+        if (placedCryo < cryoTurrets) type = 4;
+        else if (placedTesla < teslaTurrets) type = 3;
         else if (placedLaser < laserTurrets) type = 2;
         else if (placedBasic < 1 + basicTurrets) type = 1;
         if (type == 0) return "Сначала создайте башню в цехе";
         placedTowerTypes[slot] = type;
         towerLevels[slot] = 1;
         syncTurrets();
-        return type == 3 ? "Тесла-башня установлена" : type == 2 ? "Лазерная башня установлена" : "Башня установлена";
+        return type == 4 ? "Крио-башня установлена" : type == 3 ? "Тесла-башня установлена"
+                : type == 2 ? "Лазерная башня установлена" : "Башня установлена";
     }
 
     public String tryUpgradeTower(int slot) {
@@ -210,7 +214,8 @@ public class GameState {
             basicTurrets--;
         } else if (type == 2) laserTurrets--;
         else if (type == 3) teslaTurrets--;
-        double refund = (type == 3 ? 65 : type == 2 ? 25 : 8) + towerLevelAt(slot) * 4;
+        else if (type == 4) cryoTurrets--;
+        double refund = (type == 4 ? 50 : type == 3 ? 65 : type == 2 ? 25 : 8) + towerLevelAt(slot) * 4;
         scrap += refund;
         placedTowerTypes[slot] = 0;
         towerLevels[slot] = 0;
@@ -342,8 +347,10 @@ public class GameState {
                 z.pathIndex++;
                 continue;
             }
-            z.x += dx / d * z.speed * dt;
-            z.y += dy / d * z.speed * dt;
+            z.slowTimer = Math.max(0, z.slowTimer - dt);
+            double speedMultiplier = z.slowTimer > 0 ? .48 : 1.0;
+            z.x += dx / d * z.speed * speedMultiplier * dt;
+            z.y += dy / d * z.speed * speedMultiplier * dt;
         }
 
         // спавн и очистка волн
@@ -370,15 +377,15 @@ public class GameState {
         for (Turret t : turrets) {
             t.cooldown -= dt;
             if (t.cooldown <= 0) {
-                Zombie target = nearestZombie(t.x, t.y, 4.0 + rangeBonus + (t.type == 2 ? .8 : 0));
+                Zombie target = nearestZombie(t.x, t.y, 4.0 + rangeBonus + (t.type == 2 ? .8 : t.type == 4 ? .5 : 0));
                 if (target != null) {
                     double dx = target.x - t.x, dy = target.y - t.y;
                     double d = Math.max(.001, Math.hypot(dx, dy));
                     t.aimX = dx / d; t.aimY = dy / d;
-                    double typeDamage = t.type == 3 ? 2.8 : t.type == 2 ? 2.0 : 1.0;
+                    double typeDamage = t.type == 4 ? .72 : t.type == 3 ? 2.8 : t.type == 2 ? 2.0 : 1.0;
                     double dmg = 10.0 * turretLevel * t.level * (1 + turretMult) * typeDamage;
-                    projectiles.add(new Projectile(t.x, t.y, target, dmg, t.type == 3 ? 10.0 : 14.0, t.type));
-                    t.cooldown = (t.type == 3 ? 1.15 : t.type == 2 ? .85 : .7) / (1 + fireRateMult);
+                    projectiles.add(new Projectile(t.x, t.y, target, dmg, t.type == 3 ? 10.0 : t.type == 4 ? 12.0 : 14.0, t.type));
+                    t.cooldown = (t.type == 3 ? 1.15 : t.type == 4 ? .82 : t.type == 2 ? .85 : .7) / (1 + fireRateMult);
                 } else {
                     t.cooldown = 0.1;
                 }
@@ -400,6 +407,18 @@ public class GameState {
                 if (p.target.type == 2 && (p.type == 10 || p.type == 11)) resistance = .65;
                 if (p.target.type == 2 && p.type == 13) resistance = 1.55; // рельсотрон пробивает броню
                 p.target.hp -= p.damage * resistance;
+                if (p.type == 4) p.target.slowTimer = Math.max(p.target.slowTimer, 3.2);
+                if (p.type == 3) { // цепная молния переходит ещё на две близкие цели
+                    int chains = 0;
+                    for (Zombie other : zombies) {
+                        if (other == p.target || chains >= 2) continue;
+                        if (Math.hypot(other.x - p.target.x, other.y - p.target.y) < 1.8) {
+                            other.hp -= p.damage * .42;
+                            hitEffects.add(new HitEffect(other.x, other.y, 3));
+                            chains++;
+                        }
+                    }
+                }
                 if (p.type == 12) { // дробовик задевает группу вокруг цели
                     for (Zombie other : zombies)
                         if (other != p.target && Math.hypot(other.x - p.target.x, other.y - p.target.y) < 1.25)
@@ -508,6 +527,7 @@ public class GameState {
             if (r.outItem.equals("turret_basic")) basicTurrets++;
             else if (r.outItem.equals("turret_laser")) laserTurrets++;
             else if (r.outItem.equals("turret_tesla")) teslaTurrets++;
+            else if (r.outItem.equals("turret_cryo")) cryoTurrets++;
             else if (r.outItem.equals("turret_module")) turretLevel++;
             else if (r.outItem.equals("weapon_auto")) manualWeaponType = Math.max(manualWeaponType, 1);
             else if (r.outItem.equals("weapon_shotgun")) manualWeaponType = Math.max(manualWeaponType, 2);
@@ -540,6 +560,7 @@ public class GameState {
             o.put("basicTurrets", basicTurrets);
             o.put("laserTurrets", laserTurrets);
             o.put("teslaTurrets", teslaTurrets);
+            o.put("cryoTurrets", cryoTurrets);
             o.put("fireRateMult", fireRateMult);
             o.put("rangeBonus", rangeBonus);
             JSONArray slots = new JSONArray();
@@ -577,6 +598,7 @@ public class GameState {
             basicTurrets = o.optInt("basicTurrets", 0);
             laserTurrets = o.optInt("laserTurrets", 0);
             teslaTurrets = o.optInt("teslaTurrets", 0);
+            cryoTurrets = o.optInt("cryoTurrets", 0);
             fireRateMult = o.optDouble("fireRateMult", 0);
             rangeBonus = o.optDouble("rangeBonus", 0);
             JSONArray slots = o.optJSONArray("placedTowerTypes");
@@ -612,7 +634,7 @@ public class GameState {
         baseHp = 100; baseMaxHp = 100;
         wave = 0; waveActive = false; zombiesToSpawn = 0; spawnTimer = 0; nextWaveTimer = 2.0;
         zombies.clear(); projectiles.clear(); hitEffects.clear(); turrets.clear();
-        basicTurrets = 0; laserTurrets = 0; teslaTurrets = 0;
+        basicTurrets = 0; laserTurrets = 0; teslaTurrets = 0; cryoTurrets = 0;
         fireRateMult = 0; rangeBonus = 0;
         for (int i = 0; i < placedTowerTypes.length; i++) { placedTowerTypes[i] = 0; towerLevels[i] = 0; }
         placedTowerTypes[0] = 1; towerLevels[0] = 1; movingTowerSlot = -1;
@@ -652,7 +674,7 @@ public class GameState {
 
     // ===== сущности =====
     public static class Zombie {
-        double x, y, hp, maxHp, speed, damage;
+        double x, y, hp, maxHp, speed, damage, slowTimer;
         int pathId, pathIndex = 1, type;
         Zombie(double x, double y, double hp, double speed, double damage, int pathId, int type) {
             this.x = x; this.y = y; this.hp = hp; this.maxHp = hp; this.speed = speed; this.damage = damage;
