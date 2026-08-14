@@ -69,7 +69,9 @@
 - [x] GitHub Actions: lint, debug APK и unsigned release AAB.
 - [x] Gradle Wrapper 8.4, переносимая release-подпись через переменные окружения.
 - [x] Векторная иконка приложения, материалы Google Play и политика конфиденциальности.
-- [x] AAB: `android-demo/releases/DeadRig-v2.0.0-release-unsigned.aab`.
+- [x] AAB подписан upload-key и проверен `jarsigner`: `android-demo/releases/DeadRig-v2.0.0-release-signed.aab`.
+- [x] Исправлена CI-настройка Android SDK через `android-actions/setup-android`.
+- [x] Добавлены privacy-first локальная аналитика и экран настроек звука/вибрации/приватности.
 
 ## Следующие шаги
 

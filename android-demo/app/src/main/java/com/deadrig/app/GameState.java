@@ -243,9 +243,11 @@ public class GameState {
 
     private static final double OFFLINE_CAP = 8 * 3600.0;
     private final SharedPreferences prefs;
+    private final AnalyticsTracker analytics;
 
     public GameState(SharedPreferences prefs) {
         this.prefs = prefs;
+        this.analytics = new AnalyticsTracker(prefs);
         load();
         ensureWeaponRolls();
         checkDailyReset();
@@ -582,6 +584,7 @@ public class GameState {
         if (activeResearchCount() > 0 || activeCraftId != null) return "Сначала завершите исследования и производство";
         if (hashes < prestigeRequirement()) return "Нужно " + fmt(prestigeRequirement()) + " хешей";
         prestigeLevel++; prestigePoints += 1 + prestigeLevel / 3; evaluateAchievements();
+        analytics.track("prestige");
         hashes = 0; scrap = 0; minerLevel = 1; turretLevel = 1; manualWeaponLevel = 1;
         energy = maxEnergy = 100; fuel = 20; generatorLevel = 1; metal = electronics = biomass = 0;
         collectorDroneLevel = 0; activeContractType = -1; contractTimer = investmentAmount = investmentTimer = 0; minerDurability = 100;
@@ -1152,7 +1155,10 @@ public class GameState {
         }
         totalPlaySeconds += dt;
         hashes += miningRate() * dt;
-        if (weatherType == 2 && waveActive) baseHp = Math.max(0, baseHp - .08 * dt);
+        if (weatherType == 2 && waveActive) {
+            baseHp = Math.max(0, baseHp - .08 * dt);
+            if (baseHp <= 0 && !gameOver) { gameOver = true; analytics.track("game_over"); }
+        }
 
         // Движение по маршрутам tower defense и способности специальных врагов.
         List<Zombie> summonedZombies = new ArrayList<>();
@@ -1201,7 +1207,7 @@ public class GameState {
                 if (z.type == 12) { hashes = Math.max(0, hashes - 80); scrap = Math.max(0, scrap - 25); }
                 if (z.eliteModifier == 1) z.hp = Math.min(z.maxHp, z.hp + z.damage * 2);
                 zombies.remove(i);
-                if (baseHp <= 0) { baseHp = 0; gameOver = true; }
+                if (baseHp <= 0) { baseHp = 0; gameOver = true; analytics.track("game_over"); }
                 continue;
             }
             boolean flying = z.type == 6;
@@ -1408,7 +1414,7 @@ public class GameState {
                 else if (dead.lastDamageType >= 1 && dead.lastDamageType <= 6)
                     towerMasteryXp[dead.lastDamageType] += dead.type == 4 ? 25 : 6;
                 if (dead.type == 4) {
-                    bossSamples++; blueprints++; weeklyBosses++; totalBossKills++;
+                    bossSamples++; blueprints++; weeklyBosses++; totalBossKills++; analytics.track("boss_killed");
                     loreMask |= 1 << Math.min(15, 1 + bossVariant + campaignChapter());
                 }
                 evaluateAchievements();
@@ -1479,6 +1485,7 @@ public class GameState {
         bossVariant = Math.max(0, (wave / 10 - 1) % 3);
         waveModifier = wave >= 3 && Math.random() < .72 ? 1 + (int) (Math.random() * 5) : 0;
         weatherType = (wave + mapId + (int) (Math.random() * 3)) % 5;
+        analytics.track(wave % 10 == 0 ? "boss_wave_start" : "wave_start");
         waveActive = true;
     }
 
@@ -1595,6 +1602,7 @@ public class GameState {
         Defs.ResearchDef d = Defs.findResearch(id);
         doneResearch.add(id);
         if (d != null) {
+            analytics.track("research_completed");
             if (d.effectType == 0) miningMult += d.value;
             else if (d.effectType == 1) turretMult += d.value;
             else if (d.effectType == 2) scrapMult += d.value;
@@ -1606,6 +1614,7 @@ public class GameState {
     private void completeCraft(String recipeId, int quantity) {
         Defs.RecipeDef r = Defs.findRecipe(recipeId);
         if (r != null) {
+            analytics.track("craft_completed");
             quantity = Math.max(1, quantity);
             addInventoryItem(r.outItem, quantity);
             int craftedWeapon = weaponTypeForItem(r.outItem);

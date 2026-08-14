@@ -212,7 +212,8 @@ public class MainActivity extends Activity {
         button.setMinHeight(0); button.setMinimumHeight(0);
         button.setClickable(true); button.setFocusable(true);
         button.setOnClickListener(v -> {
-            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+            if (prefs == null || prefs.getBoolean("vibration_enabled", true))
+                v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
             listener.onClick(v);
         });
         GradientDrawable bg = new GradientDrawable(

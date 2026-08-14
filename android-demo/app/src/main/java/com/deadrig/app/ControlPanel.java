@@ -44,7 +44,7 @@ public final class ControlPanel {
         addCard(activity, list, "4. Исследуйте и создавайте", "Откройте экран Науки, выберите технологию, затем создайте конкретную башню в Цехе.", null, false, null);
         addCard(activity, list, "5. Устанавливайте башни", "Готовая башня попадает в резерв. Закройте меню и нажмите на светящуюся площадку рядом с дорогой.", null, false, null);
         addCard(activity, list, "6. Управляйте каждой башней", "Нажмите на установленную башню: её можно улучшить, переместить или продать.", "НАЧАТЬ ЗАЩИТУ", true, v -> {
-            feedback(); completed.run(); dialog.dismiss();
+            feedback(activity); completed.run(); dialog.dismiss();
         });
         dialog.setCancelable(false);
         dialog.show(); fit(dialog);
@@ -59,6 +59,8 @@ public final class ControlPanel {
                 "ОТКРЫТЬ", true, v -> { dialog.dismiss(); showEconomy(activity, state, changed); });
         addCard(activity, list, "Оперативный профиль", "Задания, достижения, престиж, лор, сезон, оперативники и мастерство.",
                 "ОТКРЫТЬ", true, v -> { dialog.dismiss(); showMeta(activity, state, changed); });
+        addCard(activity, list, "Настройки и приватность", "Звук, вибрация и локальная аналитика без передачи данных.",
+                "ОТКРЫТЬ", true, v -> { dialog.dismiss(); showSettings(activity, state, changed); });
         addCard(activity, list, "Расширить ферму",
                 "Новый ASIC-модуль увеличивает постоянную добычу.\nСтоимость: " + GameState.fmt(state.minerUpgradeCost()) + " хешей",
                 "УЛУЧШИТЬ", true, v -> result(activity, state.tryUpgradeMiner(), changed, dialog));
@@ -132,6 +134,28 @@ public final class ControlPanel {
                     null, false, null);
         }
         addHint(activity, list, "Чтобы установить башню из резерва, закройте экран и нажмите на светящуюся свободную площадку у дороги.");
+        dialog.show(); fit(dialog);
+    }
+
+    public static void showSettings(Activity activity, GameState state, OnChanged changed) {
+        Dialog dialog = create(activity, "НАСТРОЙКИ И ПРИВАТНОСТЬ", "Все данные текущей версии остаются на устройстве");
+        LinearLayout list = content(dialog);
+        android.content.SharedPreferences prefs = activity.getSharedPreferences("deadrig", Activity.MODE_PRIVATE);
+        AnalyticsTracker tracker = new AnalyticsTracker(prefs);
+        boolean sound = prefs.getBoolean("sound_enabled", true);
+        boolean vibration = prefs.getBoolean("vibration_enabled", true);
+        addCard(activity, list, "Звук: " + (sound ? "ВКЛ" : "ВЫКЛ"), "Системные звуки подтверждения действий.", "ПЕРЕКЛЮЧИТЬ", true,
+                v -> { prefs.edit().putBoolean("sound_enabled", !sound).apply(); dialog.dismiss(); changed.run(); });
+        addCard(activity, list, "Вибрация: " + (vibration ? "ВКЛ" : "ВЫКЛ"), "Тактильный отклик кнопок и ручной стрельбы.", "ПЕРЕКЛЮЧИТЬ", true,
+                v -> { prefs.edit().putBoolean("vibration_enabled", !vibration).apply(); dialog.dismiss(); changed.run(); });
+        addCard(activity, list, "Локальная аналитика: " + (tracker.isEnabled() ? "ВКЛ" : "ВЫКЛ"),
+                "Считает игровые события только в SharedPreferences. Сеть и сторонние SDK не используются.", "ПЕРЕКЛЮЧИТЬ", true,
+                v -> { tracker.setEnabled(!tracker.isEnabled()); dialog.dismiss(); changed.run(); });
+        addMetric(activity, list, "СОБЫТИЙ НА УСТРОЙСТВЕ", String.valueOf(tracker.totalEvents()));
+        addMetric(activity, list, "ПОСЛЕДНЕЕ СОБЫТИЕ", tracker.lastEvent());
+        addCard(activity, list, "Очистить локальную аналитику", "Не затрагивает игровой прогресс.", "ОЧИСТИТЬ", true,
+                v -> { tracker.clear(); Toast.makeText(activity, "Локальная аналитика удалена", Toast.LENGTH_SHORT).show(); dialog.dismiss(); });
+        addHint(activity, list, "DeadRig не использует рекламу, сетевую аналитику, геолокацию, камеру, микрофон или учётные записи. Политика: docs/privacy-policy.md");
         dialog.show(); fit(dialog);
     }
 
@@ -588,11 +612,12 @@ public final class ControlPanel {
     }
 
     private static void result(Activity a, String message, OnChanged changed, Dialog dialog) {
-        feedback();
+        feedback(a);
         Toast.makeText(a, message, Toast.LENGTH_SHORT).show(); changed.run(); dialog.dismiss();
     }
 
-    private static void feedback() {
+    private static void feedback(Activity activity) {
+        if (!activity.getSharedPreferences("deadrig", Activity.MODE_PRIVATE).getBoolean("sound_enabled", true)) return;
         final ToneGenerator tone = new ToneGenerator(AudioManager.STREAM_MUSIC, 28);
         tone.startTone(ToneGenerator.TONE_PROP_BEEP, 70);
         new Handler(Looper.getMainLooper()).postDelayed(tone::release, 120);

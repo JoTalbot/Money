@@ -39,6 +39,9 @@ jobs:
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
 
+      - name: Настроить Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Установить Android SDK 33
         run: |
           yes | sdkmanager --licenses >/dev/null || true

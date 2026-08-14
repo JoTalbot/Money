@@ -7,7 +7,8 @@
 
 - `releases/DeadRig-v2.0.0-complete-release.apk` — актуальная release-сборка со всеми 100 улучшениями.
 - `releases/DeadRig-v2.0.0-complete-debug.apk` — актуальная debug-сборка.
-- `releases/DeadRig-v2.0.0-release-unsigned.aab` — AAB для настройки Play App Signing.
+- `releases/DeadRig-v2.0.0-release-signed.aab` — подписанный AAB для закрытого тестирования/Play App Signing.
+- `releases/DeadRig-v2.0.0-release-unsigned.aab` — архивная unsigned-сборка.
 - Старые APK оставлены как архив предыдущих прототипов.
 
 Установка: разрешить установку из неизвестных источников → открыть APK.
