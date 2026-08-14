@@ -198,6 +198,7 @@ public class GameView extends View {
             if (distance < bestDistance) { bestDistance = distance; best = i; }
         }
         if (best >= 0) {
+            performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY);
             if (gs.towerTypeAt(best) != 0 && slotListener != null) {
                 slotListener.onOccupiedSlot(best);
             } else {

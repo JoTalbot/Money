@@ -4,6 +4,10 @@ import android.app.Activity;
 import android.app.Dialog;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.media.AudioManager;
+import android.media.ToneGenerator;
+import android.os.Handler;
+import android.os.Looper;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
@@ -30,6 +34,20 @@ public final class ControlPanel {
     public interface OnChanged { void run(); }
 
     private ControlPanel() { }
+
+    public static void showTutorial(Activity activity, OnChanged completed) {
+        Dialog dialog = create(activity, "ДОБРО ПОЖАЛОВАТЬ В DEADRIG", "Краткий инструктаж оператора");
+        LinearLayout list = content(dialog);
+        addCard(activity, list, "1. Защищайте ядро", "Зомби идут по четырём дорогам. Башни стреляют автоматически, но маршрут и состав обороны выбираете вы.", null, false, null);
+        addCard(activity, list, "2. Развивайте экономику", "Ферма добывает хеши. За очищенные волны выдаётся лом — главный материал науки и производства.", null, false, null);
+        addCard(activity, list, "3. Исследуйте и создавайте", "Откройте экран Науки, выберите технологию, затем создайте конкретную башню в Цехе.", null, false, null);
+        addCard(activity, list, "4. Устанавливайте башни", "Готовая башня попадает в резерв. Закройте меню и нажмите на светящуюся площадку рядом с дорогой.", null, false, null);
+        addCard(activity, list, "5. Управляйте каждой башней", "Нажмите на установленную башню: её можно улучшить, переместить или продать.", "НАЧАТЬ ЗАЩИТУ", true, v -> {
+            feedback(); completed.run(); dialog.dismiss();
+        });
+        dialog.setCancelable(false);
+        dialog.show(); fit(dialog);
+    }
 
     public static void showFarm(Activity activity, GameState state, OnChanged changed) {
         Dialog dialog = create(activity, "МАЙНИНГОВАЯ ФЕРМА", "Пассивный доход узла");
@@ -201,7 +219,9 @@ public final class ControlPanel {
         Button button = new Button(a); button.setAllCaps(false); button.setText(label); button.setTextSize(12); button.setTextColor(Color.WHITE); button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
                 accent ? new int[]{Color.rgb(33, 133, 132), Color.rgb(15, 78, 83)} : new int[]{Color.rgb(49, 65, 67), Color.rgb(26, 39, 42)});
-        bg.setCornerRadius(dp(a, 7)); bg.setStroke(dp(a, 1), accent ? CYAN : Color.rgb(78, 97, 98)); button.setBackground(bg); return button;
+        bg.setCornerRadius(dp(a, 7)); bg.setStroke(dp(a, 1), accent ? CYAN : Color.rgb(78, 97, 98)); button.setBackground(bg);
+        button.setHapticFeedbackEnabled(true);
+        return button;
     }
 
     private static TextView text(Activity a, String value, int size, int color) {
@@ -209,7 +229,14 @@ public final class ControlPanel {
     }
 
     private static void result(Activity a, String message, OnChanged changed, Dialog dialog) {
+        feedback();
         Toast.makeText(a, message, Toast.LENGTH_SHORT).show(); changed.run(); dialog.dismiss();
+    }
+
+    private static void feedback() {
+        final ToneGenerator tone = new ToneGenerator(AudioManager.STREAM_MUSIC, 28);
+        tone.startTone(ToneGenerator.TONE_PROP_BEEP, 70);
+        new Handler(Looper.getMainLooper()).postDelayed(tone::release, 120);
     }
 
     private static String percent(double value) { return Math.round(value * 100) + "%"; }

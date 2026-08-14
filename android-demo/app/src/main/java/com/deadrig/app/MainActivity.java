@@ -1,6 +1,7 @@
 package com.deadrig.app;
 
 import android.app.Activity;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -26,6 +27,7 @@ public class MainActivity extends Activity {
     private static final int MUTED = Color.rgb(147, 177, 177);
 
     private GameState gs;
+    private SharedPreferences prefs;
     private TextView lblHash, lblScrap, lblCrystal, lblWave, lblBase, lblResearch, lblCraft;
     private View gameOverPanel;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -35,7 +37,8 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         getWindow().setStatusBarColor(Color.rgb(5, 14, 17));
         getWindow().setNavigationBarColor(Color.rgb(5, 14, 17));
-        gs = new GameState(getSharedPreferences("deadrig", MODE_PRIVATE));
+        prefs = getSharedPreferences("deadrig", MODE_PRIVATE);
+        gs = new GameState(prefs);
 
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.rgb(5, 14, 17));
@@ -51,6 +54,10 @@ public class MainActivity extends Activity {
 
         setContentView(root);
         startHudLoop();
+        if (!prefs.getBoolean("tutorial_v1_complete", false)) {
+            handler.postDelayed(() -> ControlPanel.showTutorial(this, () ->
+                    prefs.edit().putBoolean("tutorial_v1_complete", true).apply()), 350);
+        }
     }
 
     private View buildTopPanel() {
@@ -150,7 +157,7 @@ public class MainActivity extends Activity {
         lblHash.setText("ХЕШИ  " + GameState.fmt(gs.hashes));
         lblScrap.setText("ЛОМ  " + GameState.fmt(gs.scrap));
         lblCrystal.setText("КРИСТ.  " + gs.crystals);
-        lblWave.setText("ВОЛНА  " + gs.wave + (gs.waveActive ? "  // АТАКА" : ""));
+        lblWave.setText("ВОЛНА  " + gs.wave + (gs.waveActive ? (gs.wave > 0 && gs.wave % 10 == 0 ? "  // БОСС" : "  // АТАКА") : ""));
         lblBase.setText("БАЗА  " + (int) Math.ceil(gs.baseHp) + "/" + (int) gs.baseMaxHp
                 + "  •  Т" + gs.turretCount());
         lblBase.setTextColor(gs.baseHp <= gs.baseMaxHp * .3 ? Color.rgb(255, 74, 78) : CYAN);
