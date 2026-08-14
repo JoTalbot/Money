@@ -51,7 +51,7 @@ public class GameView extends View {
         stroke.setStyle(Paint.Style.STROKE);
         stroke.setStrokeJoin(Paint.Join.ROUND);
         stroke.setStrokeCap(Paint.Cap.ROUND);
-        setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+        // Аппаратный Canvas оставляет главный поток свободным для кнопок и жестов.
     }
 
     @Override
@@ -75,7 +75,8 @@ public class GameView extends View {
         drawSortedActors(c);
         drawProjectiles(c);
         drawVignette(c, w, h);
-        postInvalidateOnAnimation();
+        // 30 FPS достаточно для idle/tower-defense и не блокирует обработку нажатий HUD.
+        postInvalidateDelayed(33);
     }
 
     private PointF iso(double x, double y) {

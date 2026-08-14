@@ -8,6 +8,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
@@ -90,6 +91,9 @@ public class MainActivity extends Activity {
         panel.setGravity(Gravity.CENTER);
         panel.setPadding(dp(7), dp(8), dp(7), dp(11));
         panel.setBackground(panelBackground(242, true));
+        panel.setClickable(true);
+        panel.setFocusable(true);
+        panel.setElevation(dp(16));
         panel.addView(button("Ферма", false, v -> act(gs.tryUpgradeMiner())));
         panel.addView(button("Оборона", false, v -> act(gs.tryUpgradeTurret())));
         panel.addView(button("Наука", false, v -> act(gs.tryStartResearch())));
@@ -127,7 +131,8 @@ public class MainActivity extends Activity {
     }
 
     private void act(String message) {
-        if (message != null) Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, message != null ? message : "Действие выполнено", Toast.LENGTH_SHORT).show();
+        refreshHud();
     }
 
     private void startHudLoop() {
@@ -173,7 +178,12 @@ public class MainActivity extends Activity {
         button.setText(label); button.setTextSize(11); button.setTextColor(Color.WHITE);
         button.setTypeface(Typeface.DEFAULT, Typeface.BOLD); button.setAllCaps(false);
         button.setPadding(dp(2), 0, dp(2), 0); button.setMinWidth(0); button.setMinimumWidth(0);
-        button.setMinHeight(0); button.setMinimumHeight(0); button.setOnClickListener(listener);
+        button.setMinHeight(0); button.setMinimumHeight(0);
+        button.setClickable(true); button.setFocusable(true);
+        button.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+            listener.onClick(v);
+        });
         GradientDrawable bg = new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
                 accent ? new int[]{Color.rgb(235, 132, 42), Color.rgb(181, 76, 25)}

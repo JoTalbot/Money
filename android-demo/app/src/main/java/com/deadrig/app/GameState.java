@@ -117,25 +117,25 @@ public class GameState {
         return type == 3 ? "Тесла-башня установлена" : type == 2 ? "Лазерная башня установлена" : "Башня установлена";
     }
 
-    // ===== действия игрока (возвращают null при успехе, иначе текст для тоста) =====
+    // ===== действия игрока (всегда возвращают явный результат для интерфейса) =====
     public String tryUpgradeMiner() {
         double c = minerUpgradeCost();
         if (hashes < c) return "Не хватает хешей (нужно " + fmt(c) + ")";
         hashes -= c; minerLevel++;
-        return null;
+        return "Ферма улучшена до уровня " + minerLevel;
     }
 
     public String tryUpgradeTurret() {
         double c = turretUpgradeCost();
         if (hashes < c) return "Не хватает хешей (нужно " + fmt(c) + ")";
         hashes -= c; turretLevel++;
-        return null;
+        return "Оборона улучшена до уровня " + turretLevel;
     }
 
     public String tryStartWave() {
         if (waveActive) return "Волна уже идёт";
         startWave();
-        return null;
+        return "Волна " + wave + " запущена";
     }
 
     public String tryStartResearch() {

@@ -5,9 +5,9 @@
 
 ## Готовые APK
 
-- `releases/DeadRig-v0.3.0-tower-defense-release.apk` — актуальная release-сборка.
-- `releases/DeadRig-v0.3.0-tower-defense-debug.apk` — актуальная debug-сборка.
-- APK v0.1.0–v0.2.0 оставлены как архив предыдущих прототипов.
+- `releases/DeadRig-v0.3.1-buttons-fixed-release.apk` — актуальная release-сборка с исправленной интерактивностью.
+- `releases/DeadRig-v0.3.1-buttons-fixed-debug.apk` — актуальная debug-сборка.
+- APK v0.1.0–v0.3.0 оставлены как архив предыдущих прототипов.
 
 Установка: разрешить установку из неизвестных источников → открыть APK.
 
