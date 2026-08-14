@@ -17,11 +17,15 @@ namespace ZombieMiner.Core
 
         public bool CanPrestige() => _s.soft >= PrestigeRequirement();
 
-        /// <summary>Сбрасывает мягкую валюту и уровни, повышает престиж. True если успешно.</summary>
+        /// <summary>
+        /// Сбрасывает мягкую валюту, лом и уровни, повышает престиж. True если успешно.
+        /// Исследования, рецепты, инвентарь и кристаллы НЕ сбрасываются (мета-прогресс).
+        /// </summary>
         public bool TryPrestige()
         {
             if (!CanPrestige()) return false;
             _s.soft = 0;
+            _s.scrap = 0;
             _s.minerLevel = 1;
             _s.turretLevel = 1;
             _s.prestigeLevel++;

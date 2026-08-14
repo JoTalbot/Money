@@ -4,9 +4,9 @@ using UnityEngine;
 namespace ZombieMiner.Core
 {
     /// <summary>
-    /// Единая точка экономики. Источники и стоки валюты проходят ТОЛЬКО через этот класс.
-    /// Это важно для "токен-ready" слоя (Путь C): в будущем локальный счётчик можно
-    /// подменить на WalletAdapter (реальный кошелёк/смарт-контракт) без правки остального кода.
+    /// Единая точка экономики. Источники и стоки валюты/ресурсов проходят ТОЛЬКО через этот класс.
+    /// Это важно для "токен-ready" слоя (Путь C): в будущем локальный счётчик можно подменить
+    /// на WalletAdapter (реальный кошелёк/смарт-контракт) без правки остального кода.
     /// </summary>
     public class EconomyManager
     {
@@ -23,13 +23,18 @@ namespace ZombieMiner.Core
 
         public double Soft => _s.soft;
         public long Hard => _s.hard;
+        public double Scrap => _s.scrap;
         public int MinerLevel => _s.minerLevel;
         public int TurretLevel => _s.turretLevel;
 
-        /// <summary>Текущая скорость майнинга с учётом уровня фермы и престижа.</summary>
-        public double MiningRatePerSec => BaseMiningRate * _s.minerLevel * PrestigeMultiplier();
+        /// <summary>Текущая скорость майнинга: уровень фермы × престиж × бонусы исследований.</summary>
+        public double MiningRatePerSec =>
+            BaseMiningRate * _s.minerLevel * PrestigeMultiplier() * (1.0 + _s.researchMiningMult);
 
         public double PrestigeMultiplier() => 1.0 + _s.prestigeLevel * 0.5;
+
+        /// <summary>Множитель урона турелей (от исследований).</summary>
+        public double TurretDamageMultiplier() => 1.0 + _s.researchTurretMult;
 
         /// <summary>Тик экономики — вызывается каждый кадр из GameManager.</summary>
         public void Tick(double deltaTime)
@@ -45,6 +50,8 @@ namespace ZombieMiner.Core
 
         public void AddHard(long amount) => _s.hard += amount;
 
+        public void AddScrap(double amount) => _s.scrap += amount;
+
         public bool TrySpendSoft(double cost)
         {
             if (_s.soft < cost) return false;
@@ -56,6 +63,13 @@ namespace ZombieMiner.Core
         {
             if (_s.hard < cost) return false;
             _s.hard -= cost;
+            return true;
+        }
+
+        public bool TrySpendScrap(double cost)
+        {
+            if (_s.scrap < cost) return false;
+            _s.scrap -= cost;
             return true;
         }
 
@@ -93,7 +107,10 @@ namespace ZombieMiner.Core
             if (gain > 0) AddSoft(gain);
         }
 
-        /// <summary>Награда за отбитую волну зомби.</summary>
+        /// <summary>Награда "хешами" за отбитую волну зомби.</summary>
         public double WaveReward(int waveNumber) => 20.0 * waveNumber * PrestigeMultiplier();
+
+        /// <summary>Награда "ломом" за волну (с бонусом исследований).</summary>
+        public double ScrapReward(int waveNumber) => 10.0 * waveNumber * (1.0 + _s.researchScrapMult);
     }
 }
