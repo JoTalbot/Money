@@ -72,7 +72,7 @@ public class GameView extends View {
         if (dt > 0) gs.update(dt);
         if (aimingAtEnemy && heldTarget != null && now - touchDownAt >= 180) {
             if (!gs.zombies.contains(heldTarget)) heldTarget = null;
-            else if (gs.manualShoot(heldTarget, false, aimingHeadshot))
+            else if (gs.manualShoot(heldTarget, false, aimingHeadshot, now - touchDownAt >= 650))
                 performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
         }
 
@@ -220,7 +220,7 @@ public class GameView extends View {
 
         if (aimingAtEnemy) {
             boolean shortTap = System.currentTimeMillis() - touchDownAt < 220;
-            if (heldTarget != null && gs.manualShoot(heldTarget, shortTap, aimingHeadshot))
+            if (heldTarget != null && gs.manualShoot(heldTarget, shortTap, aimingHeadshot, false))
                 performHapticFeedback(shortTap ? android.view.HapticFeedbackConstants.LONG_PRESS
                         : android.view.HapticFeedbackConstants.VIRTUAL_KEY);
             aimingAtEnemy = false; heldTarget = null;
@@ -417,6 +417,13 @@ public class GameView extends View {
         if (z.slowTimer > 0) {
             stroke.setColor(Color.argb(190, 118, 222, 255)); stroke.setStrokeWidth(s * .08f);
             c.drawCircle(p.x, p.y - s * .35f, s * .92f, stroke);
+        }
+        if (z == heldTarget && aimingAtEnemy && System.currentTimeMillis() - touchDownAt >= 650) {
+            float r = s * 1.15f;
+            stroke.setColor(Color.rgb(255, 210, 72)); stroke.setStrokeWidth(s * .055f);
+            c.drawCircle(p.x, p.y - s * .55f, r, stroke);
+            c.drawLine(p.x - r * 1.25f, p.y - s * .55f, p.x - r * .55f, p.y - s * .55f, stroke);
+            c.drawLine(p.x + r * .55f, p.y - s * .55f, p.x + r * 1.25f, p.y - s * .55f, stroke);
         }
     }
 

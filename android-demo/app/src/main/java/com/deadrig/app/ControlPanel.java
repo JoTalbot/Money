@@ -85,6 +85,20 @@ public final class ControlPanel {
         addCard(activity, list, "Улучшить ручное оружие",
                 "Повышает урон выстрелов игрока на 35%.\nСтоимость: " + GameState.fmt(state.manualUpgradeCost()) + " хешей",
                 "УЛУЧШИТЬ ОРУЖИЕ", true, v -> result(activity, state.tryUpgradeManualWeapon(), changed, dialog));
+        String[] weapons = {"Пистолет", "Автомат", "Дробовик", "Рельсотрон"};
+        for (int type = 0; type < weapons.length; type++) {
+            if (!state.ownsWeapon(type)) continue;
+            final int weaponType = type;
+            addCard(activity, list, weapons[type], type == state.manualWeaponType() ? "Сейчас экипировано" : "Доступно для быстрого переключения",
+                    type == state.manualWeaponType() ? null : "ЭКИПИРОВАТЬ", true,
+                    v -> result(activity, state.equipManualWeapon(weaponType), changed, dialog));
+        }
+        addCard(activity, list, "Модуль ствола  ур." + state.damageModuleLevel(), "+12% урона за уровень", "УЛУЧШИТЬ", true,
+                v -> result(activity, state.upgradeWeaponModule(0), changed, dialog));
+        addCard(activity, list, "Модуль охлаждения  ур." + state.coolingModuleLevel(), "Быстрее снимает перегрев", "УЛУЧШИТЬ", true,
+                v -> result(activity, state.upgradeWeaponModule(1), changed, dialog));
+        addCard(activity, list, "Модуль магазина  ур." + state.magazineModuleLevel(), "+15% ёмкости за уровень", "УЛУЧШИТЬ", true,
+                v -> result(activity, state.upgradeWeaponModule(2), changed, dialog));
         addCard(activity, list, "Усилить все башни",
                 "Повышает базовый урон всего оборонного контура.\nСтоимость: " + GameState.fmt(state.turretUpgradeCost()) + " хешей",
                 "УСИЛИТЬ", true, v -> result(activity, state.tryUpgradeTurret(), changed, dialog));

@@ -29,6 +29,7 @@ public class MainActivity extends Activity {
     private GameState gs;
     private SharedPreferences prefs;
     private TextView lblHash, lblScrap, lblCrystal, lblWave, lblBase, lblWeapon, lblResearch, lblCraft;
+    private Button abilityButton, ultimateButton;
     private View gameOverPanel;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
@@ -49,6 +50,12 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP));
         root.addView(buildBottomPanel(), new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
+        abilityButton = button("СПЕЦ", false, v -> act(gs.activateWeaponAbility()));
+        FrameLayout.LayoutParams abilityParams = new FrameLayout.LayoutParams(dp(118), dp(44), Gravity.START | Gravity.BOTTOM);
+        abilityParams.leftMargin = dp(10); abilityParams.bottomMargin = dp(76); root.addView(abilityButton, abilityParams);
+        ultimateButton = button("УЛЬТА", true, v -> act(gs.activateUltimate()));
+        FrameLayout.LayoutParams ultimateParams = new FrameLayout.LayoutParams(dp(118), dp(44), Gravity.END | Gravity.BOTTOM);
+        ultimateParams.rightMargin = dp(10); ultimateParams.bottomMargin = dp(76); root.addView(ultimateButton, ultimateParams);
         root.addView(buildGameOver(), new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -173,6 +180,9 @@ public class MainActivity extends Activity {
         lblResearch.setText("НАУКА  " + gs.researchStatus());
         lblCraft.setText("ЦЕХ  " + gs.craftStatus()
                 + (gs.pendingTowerCount() > 0 ? "  •  РЕЗЕРВ " + gs.pendingTowerCount() : ""));
+        if (abilityButton != null) abilityButton.setText(gs.weaponAbilityCooldownSeconds() > 0
+                ? "СПЕЦ " + gs.weaponAbilityCooldownSeconds() + "с" : "СПЕЦ ГОТОВ");
+        if (ultimateButton != null) ultimateButton.setText("УЛЬТА " + gs.ultimatePercent() + "%");
     }
 
     private LinearLayout row() {

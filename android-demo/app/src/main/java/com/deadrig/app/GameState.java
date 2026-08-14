@@ -33,6 +33,13 @@ public class GameState {
     private boolean manualOverheated = false;
     private int manualCombo = 0;
     private double manualComboTimer = 0;
+    private int ownedWeaponMask = 1; // пистолет всегда открыт
+    private int damageModuleLevel = 0;
+    private int coolingModuleLevel = 0;
+    private int magazineModuleLevel = 0;
+    private double weaponAbilityCooldown = 0;
+    private double overdriveTimer = 0;
+    private double ultimateCharge = 0;
 
     // --- мета-прогресс и ежедневные задания ---
     private int prestigeLevel = 0;
@@ -137,7 +144,7 @@ public class GameState {
         if (hashes < prestigeRequirement()) return "Нужно " + fmt(prestigeRequirement()) + " хешей";
         prestigeLevel++;
         hashes = 0; scrap = 0; minerLevel = 1; turretLevel = 1; manualWeaponLevel = 1;
-        manualAmmo = manualMagazineSize(); manualHeat = 0; manualReloadTimer = 0; manualCombo = 0;
+        manualAmmo = manualMagazineSize(); manualHeat = 0; manualReloadTimer = 0; manualCombo = 0; ultimateCharge = 0;
         wave = 0; waveActive = false; zombies.clear(); projectiles.clear(); hitEffects.clear();
         basicTurrets = laserTurrets = teslaTurrets = cryoTurrets = 0;
         for (int i = 0; i < placedTowerTypes.length; i++) { placedTowerTypes[i] = 0; towerLevels[i] = 0; }
@@ -149,20 +156,27 @@ public class GameState {
     public int manualWeaponType() { return manualWeaponType; }
     public int manualWeaponLevel() { return manualWeaponLevel; }
     public int manualMagazineSize() {
-        return manualWeaponType == 3 ? 3 : manualWeaponType == 2 ? 6 : manualWeaponType == 1 ? 30 : 12;
+        int base = manualWeaponType == 3 ? 3 : manualWeaponType == 2 ? 6 : manualWeaponType == 1 ? 30 : 12;
+        return Math.max(1, (int) Math.round(base * (1 + magazineModuleLevel * .15)));
     }
     public int manualAmmo() { return manualAmmo; }
     public double manualHeat() { return manualHeat; }
     public boolean manualOverheated() { return manualOverheated; }
     public boolean manualReloading() { return manualReloadTimer > 0; }
     public int manualCombo() { return manualCombo; }
+    public int damageModuleLevel() { return damageModuleLevel; }
+    public int coolingModuleLevel() { return coolingModuleLevel; }
+    public int magazineModuleLevel() { return magazineModuleLevel; }
+    public boolean ownsWeapon(int type) { return (ownedWeaponMask & (1 << type)) != 0; }
+    public int weaponAbilityCooldownSeconds() { return (int) Math.ceil(weaponAbilityCooldown); }
+    public int ultimatePercent() { return (int) Math.min(100, Math.round(ultimateCharge)); }
     public String manualWeaponName() {
         return manualWeaponType == 3 ? "Рельсотрон" : manualWeaponType == 2 ? "Дробовик"
                 : manualWeaponType == 1 ? "Автомат" : "Пистолет";
     }
     public double manualWeaponDamage() {
         double base = manualWeaponType == 3 ? 65 : manualWeaponType == 2 ? 24 : manualWeaponType == 1 ? 9 : 14;
-        return base * (1 + (manualWeaponLevel - 1) * .35);
+        return base * (1 + (manualWeaponLevel - 1) * .35) * (1 + damageModuleLevel * .12);
     }
     public double manualUpgradeCost() { return 20.0 * Math.pow(1.7, manualWeaponLevel - 1); }
     public int turretCount() { return placedTowerCount(); }
@@ -226,6 +240,53 @@ public class GameState {
         return "Башня улучшена до уровня " + towerLevels[slot];
     }
 
+    public String equipManualWeapon(int type) {
+        if (type < 0 || type > 3 || !ownsWeapon(type)) return "Оружие ещё не создано";
+        manualWeaponType = type; manualAmmo = manualMagazineSize(); manualHeat = 0; manualReloadTimer = 0;
+        return manualWeaponName() + " экипирован";
+    }
+
+    public String upgradeWeaponModule(int module) {
+        int level = module == 0 ? damageModuleLevel : module == 1 ? coolingModuleLevel : magazineModuleLevel;
+        double cost = 30 * Math.pow(1.8, level);
+        if (scrap < cost) return "Нужно " + fmt(cost) + " лома";
+        scrap -= cost;
+        if (module == 0) damageModuleLevel++;
+        else if (module == 1) coolingModuleLevel++;
+        else { magazineModuleLevel++; manualAmmo = Math.min(manualAmmo, manualMagazineSize()); }
+        return "Модуль улучшен до уровня " + (level + 1);
+    }
+
+    public String activateWeaponAbility() {
+        if (weaponAbilityCooldown > 0) return "Способность будет готова через " + weaponAbilityCooldownSeconds() + " сек.";
+        if (zombies.isEmpty()) return "Нет целей";
+        if (manualWeaponType == 1) {
+            overdriveTimer = 5.0;
+        } else {
+            int hits = manualWeaponType == 3 ? zombies.size() : manualWeaponType == 2 ? Math.min(5, zombies.size()) : Math.min(3, zombies.size());
+            for (int i = 0; i < hits; i++) {
+                Zombie target = zombies.get(i);
+                double mult = manualWeaponType == 3 ? 2.2 : manualWeaponType == 2 ? 1.2 : 1.5;
+                target.hp -= manualWeaponDamage() * mult;
+                target.lastHitManual = true;
+                hitEffects.add(new HitEffect(target.x, target.y, 10 + manualWeaponType));
+            }
+        }
+        weaponAbilityCooldown = 18.0;
+        return "Активирована способность: " + manualWeaponName();
+    }
+
+    public String activateUltimate() {
+        if (ultimateCharge < 100) return "Ультимейт заряжен на " + ultimatePercent() + "%";
+        for (Zombie zombie : zombies) {
+            zombie.hp -= Math.max(120, manualWeaponDamage() * 6);
+            zombie.lastHitManual = true;
+            hitEffects.add(new HitEffect(zombie.x, zombie.y, 13));
+        }
+        ultimateCharge = 0;
+        return "Орбитальный импульс активирован";
+    }
+
     public String tryUpgradeManualWeapon() {
         double cost = manualUpgradeCost();
         if (hashes < cost) return "Нужно " + fmt(cost) + " хешей";
@@ -235,20 +296,22 @@ public class GameState {
     }
 
     /** Ручной выстрел с критами, попаданием в голову, магазином и перегревом. */
-    public boolean manualShoot(Zombie target, boolean charged, boolean headshot) {
+    public boolean manualShoot(Zombie target, boolean charged, boolean headshot, boolean preciseAim) {
         if (target == null || !zombies.contains(target) || manualCooldown > 0 || gameOver
                 || manualReloadTimer > 0 || manualOverheated) return false;
         if (manualAmmo <= 0) { startManualReload(); return false; }
 
-        boolean critical = Math.random() < Math.min(.35, .10 + manualWeaponLevel * .012);
+        boolean critical = Math.random() < Math.min(.55, .10 + manualWeaponLevel * .012 + (preciseAim ? .18 : 0));
         double damage = manualWeaponDamage() * (charged ? 1.65 : 1.0)
-                * (headshot ? 2.2 : 1.0) * (critical ? 1.75 : 1.0);
+                * (headshot ? 2.2 : 1.0) * (preciseAim ? 1.28 : 1.0) * (critical ? 1.75 : 1.0);
         double interval = manualWeaponType == 3 ? .90 : manualWeaponType == 2 ? .62
                 : manualWeaponType == 1 ? .11 : .32;
+        if (overdriveTimer > 0) interval *= .48;
         manualCooldown = interval * (charged ? 1.12 : 1.0);
         manualAmmo--;
-        manualHeat = Math.min(1.2, manualHeat + (manualWeaponType == 3 ? .46
-                : manualWeaponType == 2 ? .22 : manualWeaponType == 1 ? .045 : .12));
+        double heatGain = manualWeaponType == 3 ? .46 : manualWeaponType == 2 ? .22 : manualWeaponType == 1 ? .045 : .12;
+        if (overdriveTimer > 0) heatGain *= .45;
+        manualHeat = Math.min(1.2, manualHeat + heatGain);
         if (manualHeat >= 1.0) manualOverheated = true;
         if (manualAmmo <= 0) startManualReload();
         dailyShots++;
@@ -383,7 +446,7 @@ public class GameState {
         boolean tower = recipe.outItem.startsWith("turret_") && !recipe.outItem.equals("turret_module");
         int weaponTier = recipe.outItem.equals("weapon_rail") ? 3 : recipe.outItem.equals("weapon_shotgun") ? 2
                 : recipe.outItem.equals("weapon_auto") ? 1 : 0;
-        if (weaponTier > 0 && manualWeaponType >= weaponTier) return "Это оружие уже создано";
+        if (weaponTier > 0 && ownsWeapon(weaponTier)) return "Это оружие уже создано";
         if (tower && pendingTowerCount() > 0) return "Сначала установите башню из резерва";
         if (tower && placedTowerCount() >= TOWER_SLOTS.length) return "Все площадки заняты";
         if (hashes < recipe.costHashes || scrap < recipe.costScrap)
@@ -401,7 +464,9 @@ public class GameState {
     public void update(double dt) {
         if (gameOver) return;
         manualCooldown = Math.max(0, manualCooldown - dt);
-        manualHeat = Math.max(0, manualHeat - dt * .28);
+        weaponAbilityCooldown = Math.max(0, weaponAbilityCooldown - dt);
+        overdriveTimer = Math.max(0, overdriveTimer - dt);
+        manualHeat = Math.max(0, manualHeat - dt * (.28 + coolingModuleLevel * .08));
         if (manualOverheated && manualHeat <= .45) manualOverheated = false;
         if (manualReloadTimer > 0) {
             manualReloadTimer -= dt;
@@ -519,6 +584,7 @@ public class GameState {
         for (int i = zombies.size() - 1; i >= 0; i--) {
             Zombie dead = zombies.get(i);
             if (dead.hp <= 0) {
+                ultimateCharge = Math.min(100, ultimateCharge + (dead.lastHitManual ? 5 : 2));
                 if (dead.lastHitManual) {
                     manualCombo = Math.min(99, manualCombo + 1);
                     manualComboTimer = 3.0;
@@ -623,9 +689,9 @@ public class GameState {
             else if (r.outItem.equals("turret_tesla")) teslaTurrets++;
             else if (r.outItem.equals("turret_cryo")) cryoTurrets++;
             else if (r.outItem.equals("turret_module")) turretLevel++;
-            else if (r.outItem.equals("weapon_auto")) { manualWeaponType = Math.max(manualWeaponType, 1); manualAmmo = manualMagazineSize(); }
-            else if (r.outItem.equals("weapon_shotgun")) { manualWeaponType = Math.max(manualWeaponType, 2); manualAmmo = manualMagazineSize(); }
-            else if (r.outItem.equals("weapon_rail")) { manualWeaponType = Math.max(manualWeaponType, 3); manualAmmo = manualMagazineSize(); }
+            else if (r.outItem.equals("weapon_auto")) { ownedWeaponMask |= 1 << 1; manualWeaponType = 1; manualAmmo = manualMagazineSize(); }
+            else if (r.outItem.equals("weapon_shotgun")) { ownedWeaponMask |= 1 << 2; manualWeaponType = 2; manualAmmo = manualMagazineSize(); }
+            else if (r.outItem.equals("weapon_rail")) { ownedWeaponMask |= 1 << 3; manualWeaponType = 3; manualAmmo = manualMagazineSize(); }
             else if (r.outItem.equals("wall")) {
                 baseMaxHp += 20;
                 baseHp = Math.min(baseMaxHp, baseHp + 20);
@@ -656,6 +722,11 @@ public class GameState {
             o.put("manualWeaponLevel", manualWeaponLevel);
             o.put("manualAmmo", manualAmmo);
             o.put("manualHeat", manualHeat);
+            o.put("ownedWeaponMask", ownedWeaponMask);
+            o.put("damageModuleLevel", damageModuleLevel);
+            o.put("coolingModuleLevel", coolingModuleLevel);
+            o.put("magazineModuleLevel", magazineModuleLevel);
+            o.put("ultimateCharge", ultimateCharge);
             o.put("prestigeLevel", prestigeLevel);
             o.put("dailyKey", dailyKey);
             o.put("dailyKills", dailyKills);
@@ -702,6 +773,11 @@ public class GameState {
             manualWeaponLevel = Math.max(1, o.optInt("manualWeaponLevel", 1));
             manualAmmo = o.optInt("manualAmmo", manualMagazineSize());
             manualHeat = o.optDouble("manualHeat", 0);
+            ownedWeaponMask = o.optInt("ownedWeaponMask", (1 << (manualWeaponType + 1)) - 1);
+            damageModuleLevel = o.optInt("damageModuleLevel", 0);
+            coolingModuleLevel = o.optInt("coolingModuleLevel", 0);
+            magazineModuleLevel = o.optInt("magazineModuleLevel", 0);
+            ultimateCharge = o.optDouble("ultimateCharge", 0);
             prestigeLevel = o.optInt("prestigeLevel", 0);
             dailyKey = o.optString("dailyKey", "");
             dailyKills = o.optInt("dailyKills", 0);
@@ -750,7 +826,8 @@ public class GameState {
         hashes = 0; scrap = 0; crystals = 0; minerLevel = 1; turretLevel = 1;
         manualWeaponType = 0; manualWeaponLevel = 1; manualCooldown = 0; manualAmmo = 12;
         manualReloadTimer = 0; manualHeat = 0; manualOverheated = false; manualCombo = 0; manualComboTimer = 0;
-        prestigeLevel = 0;
+        ownedWeaponMask = 1; damageModuleLevel = coolingModuleLevel = magazineModuleLevel = 0;
+        weaponAbilityCooldown = overdriveTimer = ultimateCharge = 0; prestigeLevel = 0;
         dailyKey = ""; dailyKills = dailyWaves = dailyShots = 0; dailyClaimed = false;
         miningMult = 0; turretMult = 0; scrapMult = 0;
         baseHp = 100; baseMaxHp = 100;
