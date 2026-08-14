@@ -58,6 +58,13 @@ public final class ControlPanel {
         addCard(activity, list, "Расширить ферму",
                 "Новый ASIC-модуль увеличивает постоянную добычу.\nСтоимость: " + GameState.fmt(state.minerUpgradeCost()) + " хешей",
                 "УЛУЧШИТЬ", true, v -> result(activity, state.tryUpgradeMiner(), changed, dialog));
+        addCard(activity, list, "Ежедневный контракт", state.dailyStatus() + "\nНаграда: 5 кристаллов и 75 лома",
+                state.dailyReady() ? "ЗАБРАТЬ НАГРАДУ" : "В ПРОЦЕССЕ", state.dailyReady(),
+                v -> result(activity, state.claimDailyReward(), changed, dialog));
+        addCard(activity, list, "Переезд на новый узел  //  престиж " + state.prestigeLevel(),
+                "Сбрасывает текущую экономику и башни, сохраняя исследования и открытое оружие. Каждый престиж даёт +50% дохода навсегда.\nТребуется: "
+                        + GameState.fmt(state.prestigeRequirement()) + " хешей",
+                "ЗАПУСТИТЬ ПРЕСТИЖ", true, v -> result(activity, state.tryPrestige(), changed, dialog));
         addHint(activity, list, "Доход продолжает начисляться вне игры: 50%, максимум 8 часов.");
         dialog.show(); fit(dialog);
     }

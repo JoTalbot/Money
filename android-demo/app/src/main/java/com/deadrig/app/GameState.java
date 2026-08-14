@@ -6,6 +6,9 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.TimeZone;
 
 /**
  * Вся игровая логика DeadRig (Android-демо): экономика, волны зомби, турели,
@@ -24,6 +27,14 @@ public class GameState {
     private int manualWeaponType = 0; // 0 пистолет, 1 автомат, 2 дробовик, 3 рельсотрон
     private int manualWeaponLevel = 1;
     private double manualCooldown = 0;
+
+    // --- мета-прогресс и ежедневные задания ---
+    private int prestigeLevel = 0;
+    private String dailyKey = "";
+    private int dailyKills = 0;
+    private int dailyWaves = 0;
+    private int dailyShots = 0;
+    private boolean dailyClaimed = false;
 
     // --- бонусы исследований ---
     public double miningMult = 0;
@@ -92,6 +103,7 @@ public class GameState {
     public GameState(SharedPreferences prefs) {
         this.prefs = prefs;
         load();
+        checkDailyReset();
         if (placedTowerCount() == 0) placedTowerTypes[0] = 1;
         for (int i = 0; i < towerLevels.length; i++)
             if (placedTowerTypes[i] != 0 && towerLevels[i] == 0) towerLevels[i] = 1;
@@ -99,7 +111,32 @@ public class GameState {
     }
 
     // ===== формулы =====
-    public double miningRate() { return 1.0 * minerLevel * (1 + miningMult); }
+    public double miningRate() { return 1.0 * minerLevel * (1 + miningMult) * (1 + prestigeLevel * .5); }
+    public int prestigeLevel() { return prestigeLevel; }
+    public double prestigeRequirement() { return 5000.0 * Math.pow(10, prestigeLevel); }
+    public String dailyStatus() {
+        checkDailyReset();
+        return "Зомби " + dailyKills + "/50  •  волны " + dailyWaves + "/5  •  выстрелы " + dailyShots + "/100";
+    }
+    public boolean dailyReady() { return dailyKills >= 50 && dailyWaves >= 5 && dailyShots >= 100 && !dailyClaimed; }
+    public String claimDailyReward() {
+        checkDailyReset();
+        if (dailyClaimed) return "Награда уже получена";
+        if (!dailyReady()) return "Задания ещё не выполнены";
+        dailyClaimed = true; crystals += 5; scrap += 75;
+        return "Ежедневная награда: +5 кристаллов и +75 лома";
+    }
+    public String tryPrestige() {
+        if (activeResearchId != null || activeCraftId != null) return "Сначала завершите исследование и производство";
+        if (hashes < prestigeRequirement()) return "Нужно " + fmt(prestigeRequirement()) + " хешей";
+        prestigeLevel++;
+        hashes = 0; scrap = 0; minerLevel = 1; turretLevel = 1; manualWeaponLevel = 1;
+        wave = 0; waveActive = false; zombies.clear(); projectiles.clear(); hitEffects.clear();
+        basicTurrets = laserTurrets = teslaTurrets = cryoTurrets = 0;
+        for (int i = 0; i < placedTowerTypes.length; i++) { placedTowerTypes[i] = 0; towerLevels[i] = 0; }
+        placedTowerTypes[0] = 1; towerLevels[0] = 1; syncTurrets();
+        return "Новый узел запущен. Бонус дохода: +" + (prestigeLevel * 50) + "%";
+    }
     public double minerUpgradeCost() { return 10.0 * Math.pow(1.5, minerLevel - 1); }
     public double turretUpgradeCost() { return 15.0 * Math.pow(1.6, turretLevel - 1); }
     public int manualWeaponType() { return manualWeaponType; }
@@ -189,6 +226,7 @@ public class GameState {
         double interval = manualWeaponType == 3 ? .90 : manualWeaponType == 2 ? .62
                 : manualWeaponType == 1 ? .11 : .32;
         manualCooldown = interval * (charged ? 1.12 : 1.0);
+        dailyShots++;
         projectiles.add(new Projectile(0, 0, target, damage,
                 manualWeaponType == 3 ? 30 : 18, 10 + manualWeaponType));
         return true;
@@ -363,6 +401,7 @@ public class GameState {
             }
             if (zombiesToSpawn <= 0 && zombies.isEmpty()) {
                 waveActive = false;
+                dailyWaves++;
                 hashes += 20.0 * wave;
                 scrap += 10.0 * wave * (1 + scrapMult);
                 nextWaveTimer = 5.0;
@@ -432,7 +471,7 @@ public class GameState {
             p.y += dy / d * p.speed * dt;
         }
         for (int i = zombies.size() - 1; i >= 0; i--)
-            if (zombies.get(i).hp <= 0) zombies.remove(i);
+            if (zombies.get(i).hp <= 0) { zombies.remove(i); dailyKills++; }
 
         for (int i = hitEffects.size() - 1; i >= 0; i--) {
             HitEffect effect = hitEffects.get(i);
@@ -540,6 +579,15 @@ public class GameState {
         activeCraftId = null;
     }
 
+    private void checkDailyReset() {
+        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+        format.setTimeZone(TimeZone.getTimeZone("UTC"));
+        String today = format.format(new Date());
+        if (!today.equals(dailyKey)) {
+            dailyKey = today; dailyKills = 0; dailyWaves = 0; dailyShots = 0; dailyClaimed = false;
+        }
+    }
+
     // ===== сохранение/загрузка =====
     public void save() {
         try {
@@ -551,6 +599,12 @@ public class GameState {
             o.put("turretLevel", turretLevel);
             o.put("manualWeaponType", manualWeaponType);
             o.put("manualWeaponLevel", manualWeaponLevel);
+            o.put("prestigeLevel", prestigeLevel);
+            o.put("dailyKey", dailyKey);
+            o.put("dailyKills", dailyKills);
+            o.put("dailyWaves", dailyWaves);
+            o.put("dailyShots", dailyShots);
+            o.put("dailyClaimed", dailyClaimed);
             o.put("miningMult", miningMult);
             o.put("turretMult", turretMult);
             o.put("scrapMult", scrapMult);
@@ -589,6 +643,12 @@ public class GameState {
             turretLevel = o.getInt("turretLevel");
             manualWeaponType = o.optInt("manualWeaponType", 0);
             manualWeaponLevel = Math.max(1, o.optInt("manualWeaponLevel", 1));
+            prestigeLevel = o.optInt("prestigeLevel", 0);
+            dailyKey = o.optString("dailyKey", "");
+            dailyKills = o.optInt("dailyKills", 0);
+            dailyWaves = o.optInt("dailyWaves", 0);
+            dailyShots = o.optInt("dailyShots", 0);
+            dailyClaimed = o.optBoolean("dailyClaimed", false);
             miningMult = o.optDouble("miningMult", 0);
             turretMult = o.optDouble("turretMult", 0);
             scrapMult = o.optDouble("scrapMult", 0);
@@ -629,7 +689,8 @@ public class GameState {
 
     public void reset() {
         hashes = 0; scrap = 0; crystals = 0; minerLevel = 1; turretLevel = 1;
-        manualWeaponType = 0; manualWeaponLevel = 1; manualCooldown = 0;
+        manualWeaponType = 0; manualWeaponLevel = 1; manualCooldown = 0; prestigeLevel = 0;
+        dailyKey = ""; dailyKills = dailyWaves = dailyShots = 0; dailyClaimed = false;
         miningMult = 0; turretMult = 0; scrapMult = 0;
         baseHp = 100; baseMaxHp = 100;
         wave = 0; waveActive = false; zombiesToSpawn = 0; spawnTimer = 0; nextWaveTimer = 2.0;
