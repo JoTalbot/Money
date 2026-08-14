@@ -78,6 +78,8 @@ public final class ControlPanel {
         addCard(activity, list, "Тактическая карта", state.mapName() + "  •  этаж " + (state.floorLevel() + 1)
                         + "\n" + state.weatherName() + "  •  " + state.hazardName(), "УПРАВЛЕНИЕ КАРТОЙ", true,
                 v -> { dialog.dismiss(); showMap(activity, state, changed); });
+        addCard(activity, list, "Энциклопедия заражённых", "Открытые классы, способности и число уничтожений.", "ОТКРЫТЬ", true,
+                v -> { dialog.dismiss(); showBestiary(activity, state, changed); });
         addMetric(activity, list, "БОНУСЫ", "+" + percent(state.turretDamageBonus()) + " урон  •  +"
                 + percent(state.turretFireRateBonus()) + " темп  •  +" + String.format(Locale.US, "%.1f", state.turretRangeBonus()) + " дальность");
         addMetric(activity, list, "РУЧНОЕ ОРУЖИЕ", state.manualWeaponName() + "  ур." + state.manualWeaponLevel()
@@ -129,6 +131,19 @@ public final class ControlPanel {
         dialog.show(); fit(dialog);
     }
 
+    public static void showBestiary(Activity activity, GameState state, OnChanged changed) {
+        Dialog dialog = create(activity, "ЭНЦИКЛОПЕДИЯ ЗАРАЖЁННЫХ", "Разведданные оборонного узла");
+        LinearLayout list = content(dialog);
+        for (int type = 0; type < EnemyCatalog.COUNT; type++) {
+            boolean seen = state.enemySeen(type);
+            addCard(activity, list, seen ? EnemyCatalog.NAMES[type] : "НЕИЗВЕСТНЫЙ ОБРАЗЕЦ",
+                    seen ? EnemyCatalog.DESCRIPTIONS[type] + "\nУничтожено: " + state.enemyKills(type)
+                            : "Встретьте этот класс в бою, чтобы открыть запись.", null, false, null);
+        }
+        addHint(activity, list, "Элитные свойства: вампиризм, ускорение, невидимость и отражение урона.");
+        dialog.show(); fit(dialog);
+    }
+
     public static void showMap(Activity activity, GameState state, OnChanged changed) {
         Dialog dialog = create(activity, "ТАКТИЧЕСКАЯ КАРТА", state.mapName() + "  //  этаж " + (state.floorLevel() + 1));
         LinearLayout list = content(dialog);
@@ -159,7 +174,8 @@ public final class ControlPanel {
         LinearLayout list = content(dialog);
         addMetric(activity, list, "ЛОКАЛЬНЫЙ УРОВЕНЬ", String.valueOf(state.towerLevelAt(slot)));
         addMetric(activity, list, "ГЛОБАЛЬНЫЙ УРОВЕНЬ", String.valueOf(state.turretLevel));
-        addMetric(activity, list, "ПЛОЩАДКА", (int) state.platformHealth(slot) + "/100");
+        addMetric(activity, list, "ПЛОЩАДКА", (int) state.platformHealth(slot) + "/100"
+                + (state.platformDisabledSeconds(slot) > 0 ? "  ОТКЛЮЧЕНА " + (int) Math.ceil(state.platformDisabledSeconds(slot)) + "с" : ""));
         if (state.platformHealth(slot) < 100) addCard(activity, list, "Ремонт площадки", "Повреждённая площадка может отключить башню.",
                 "ОТРЕМОНТИРОВАТЬ", true, v -> result(activity, state.repairPlatform(slot), changed, dialog));
         addMetric(activity, list, "РАДИУС", String.format(Locale.US, "%.1f", state.towerRangeAt(slot)));

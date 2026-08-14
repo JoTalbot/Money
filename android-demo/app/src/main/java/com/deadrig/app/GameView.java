@@ -298,7 +298,7 @@ public class GameView extends View {
         float bestDistance = unit * 1.05f;
         for (GameState.Zombie zombie : gs.zombies) {
             PointF p = iso(zombie.x, zombie.y);
-            float vertical = zombie.type == 4 ? unit * .9f : unit * .45f;
+            float vertical = unit * enemyScale(zombie.type) * 1.25f;
             float distance = (float) Math.hypot(x - p.x, y - (p.y - vertical));
             if (distance < bestDistance) { bestDistance = distance; best = zombie; }
         }
@@ -307,7 +307,7 @@ public class GameView extends View {
 
     private boolean isHeadshot(GameState.Zombie zombie, float touchY) {
         PointF p = iso(zombie.x, zombie.y);
-        float scale = zombie.type == 4 ? .72f : zombie.type == 2 ? .48f : zombie.type == 1 ? .32f : .38f;
+        float scale = enemyScale(zombie.type);
         return touchY < p.y - unit * scale * .72f;
     }
 
@@ -441,14 +441,38 @@ public class GameView extends View {
         }
     }
 
+    private float enemyScale(int type) {
+        if (type == 4) return .72f;
+        if (type == 2 || type == 7 || type == 8) return .48f;
+        if (type == 1 || type == 12) return .32f;
+        if (type == 6) return .35f;
+        if (type == 10) return .43f;
+        return .38f;
+    }
+
+    private int enemyBodyColor(int type) {
+        int[] colors = {Color.rgb(67,94,76), Color.rgb(72,115,86), Color.rgb(68,78,83), Color.rgb(75,91,43),
+                Color.rgb(103,48,52), Color.rgb(61,128,76), Color.rgb(73,105,116), Color.rgb(48,91,121),
+                Color.rgb(91,52,111), Color.rgb(49,105,102), Color.rgb(124,52,38), Color.rgb(105,76,48), Color.rgb(130,108,42)};
+        return colors[Math.max(0, Math.min(colors.length - 1, type))];
+    }
+
+    private int enemyArmorColor(int type) {
+        if (type == 4) return Color.rgb(175,52,43);
+        if (type == 3 || type == 5) return Color.rgb(150,174,43);
+        if (type == 2) return Color.rgb(105,120,126);
+        if (type == 7) return Color.rgb(70,156,203);
+        if (type == 8) return Color.rgb(166,80,198);
+        if (type == 10) return Color.rgb(235,80,42);
+        return ORANGE;
+    }
+
     private void drawZombie(Canvas c, GameState.Zombie z) {
         PointF p = iso(z.x, z.y);
-        float scale = z.type == 4 ? .72f : z.type == 2 ? .48f : z.type == 1 ? .32f : .38f;
+        float scale = enemyScale(z.type);
         float s = unit * scale;
-        int body = z.type == 4 ? Color.rgb(103, 48, 52) : z.type == 3 ? Color.rgb(75, 91, 43)
-                : z.type == 2 ? Color.rgb(68, 78, 83) : z.type == 1 ? Color.rgb(72, 115, 86) : Color.rgb(67, 94, 76);
-        int armor = z.type == 4 ? Color.rgb(175, 52, 43) : z.type == 3 ? Color.rgb(150, 174, 43)
-                : z.type == 2 ? Color.rgb(105, 120, 126) : ORANGE;
+        int body = enemyBodyColor(z.type);
+        int armor = enemyArmorColor(z.type);
         paint.setColor(Color.argb(100, 0, 0, 0)); c.drawOval(p.x - s, p.y + s * .55f, p.x + s, p.y + s * .9f, paint);
         stroke.setStrokeWidth(s * .34f); stroke.setColor(Color.rgb(29, 43, 48));
         c.drawLine(p.x - s * .18f, p.y + s * .18f, p.x - s * .32f, p.y + s * .72f, stroke);
@@ -464,6 +488,24 @@ public class GameView extends View {
         paint.setColor(z.type == 3 ? Color.rgb(191, 255, 56) : Color.rgb(210, 255, 105));
         c.drawCircle(p.x - s * .18f, p.y - s * .93f, s * .10f, paint);
         paint.setColor(RED); c.drawCircle(p.x + s * .20f, p.y - s * .93f, s * .11f, paint);
+        if (z.type == 6) {
+            paint.setColor(Color.rgb(91, 128, 139));
+            triangle(c, p.x - s * .45f, p.y - s * .25f, p.x - s * 1.15f, p.y - s * .75f, p.x - s * .75f, p.y + s * .2f, paint);
+            triangle(c, p.x + s * .45f, p.y - s * .25f, p.x + s * 1.15f, p.y - s * .75f, p.x + s * .75f, p.y + s * .2f, paint);
+        }
+        if (z.type == 7) {
+            stroke.setColor(Color.argb(170, 80, 195, 255)); stroke.setStrokeWidth(s * .08f); c.drawCircle(p.x, p.y - s * .35f, s * 1.15f, stroke);
+        }
+        if (z.type == 8) {
+            stroke.setColor(Color.rgb(193, 96, 255)); stroke.setStrokeWidth(s * .08f); c.drawCircle(p.x, p.y - s * 1.15f, s * .55f, stroke);
+        }
+        if (z.type == 10) { paint.setColor(Color.rgb(255, 70, 42)); c.drawCircle(p.x, p.y - s * .1f, s * .28f, paint); }
+        if (z.eliteModifier > 0) {
+            int eliteColor = z.eliteModifier == 1 ? Color.rgb(230, 64, 86) : z.eliteModifier == 2 ? Color.rgb(255, 205, 62)
+                    : z.eliteModifier == 3 ? Color.rgb(125, 185, 210) : Color.rgb(213, 126, 255);
+            stroke.setColor(Color.argb(190, Color.red(eliteColor), Color.green(eliteColor), Color.blue(eliteColor)));
+            stroke.setStrokeWidth(s * .06f); c.drawCircle(p.x, p.y - s * .4f, s * 1.05f, stroke);
+        }
         if (z.type == 2 || z.type == 4) {
             stroke.setColor(z.type == 4 ? RED : Color.rgb(157, 185, 190)); stroke.setStrokeWidth(s * .10f);
             c.drawLine(p.x - s * .58f, p.y - s * .45f, p.x + s * .58f, p.y - s * .45f, stroke);

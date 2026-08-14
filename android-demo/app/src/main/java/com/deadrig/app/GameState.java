@@ -84,6 +84,9 @@ public class GameState {
     private double barricadeHp = 500;
     private int capturedNodes = 0;
     private final double[] platformHealth = new double[8];
+    private final double[] platformDisabledTimer = new double[8];
+    private final int[] enemyKills = new int[EnemyCatalog.COUNT];
+    private final boolean[] enemySeen = new boolean[EnemyCatalog.COUNT];
 
     // --- сущности ---
     public final List<Zombie> zombies = new ArrayList<>();
@@ -180,6 +183,9 @@ public class GameState {
     public double barricadeHp() { return barricadeHp; }
     public int capturedNodes() { return capturedNodes; }
     public double platformHealth(int slot) { return validSlot(slot) ? platformHealth[slot] : 0; }
+    public double platformDisabledSeconds(int slot) { return validSlot(slot) ? platformDisabledTimer[slot] : 0; }
+    public boolean enemySeen(int type) { return type >= 0 && type < EnemyCatalog.COUNT && enemySeen[type]; }
+    public int enemyKills(int type) { return type >= 0 && type < EnemyCatalog.COUNT ? enemyKills[type] : 0; }
     public String mapName() { return mapId == 2 ? "Заброшенная лаборатория" : mapId == 1 ? "Красный каньон" : "Узел 07"; }
     public String weatherName() {
         String[] names = {"Ясно", "Туман", "Кислотный дождь", "Мороз", "ЭМ-буря"}; return names[weatherType];
@@ -675,6 +681,8 @@ public class GameState {
         overdriveTimer = Math.max(0, overdriveTimer - dt);
         droneCooldown = Math.max(0, droneCooldown - dt);
         mineCooldown = Math.max(0, mineCooldown - dt);
+        for (int i = 0; i < platformDisabledTimer.length; i++)
+            platformDisabledTimer[i] = Math.max(0, platformDisabledTimer[i] - dt);
         manualHeat = Math.max(0, manualHeat - dt * (.28 + coolingModuleLevel * .08));
         if (manualOverheated && manualHeat <= .45) manualOverheated = false;
         if (manualReloadTimer > 0) {
@@ -688,21 +696,45 @@ public class GameState {
         hashes += miningRate() * dt;
         if (weatherType == 2 && waveActive) baseHp = Math.max(0, baseHp - .08 * dt);
 
-        // Движение по маршрутам tower defense и урон базе в конечной точке.
+        // Движение по маршрутам tower defense и способности специальных врагов.
+        List<Zombie> summonedZombies = new ArrayList<>();
         for (int i = zombies.size() - 1; i >= 0; i--) {
             Zombie z = zombies.get(i);
             if (z.burnTimer > 0) { z.burnTimer -= dt; z.hp -= z.burnDps * dt; }
             z.acidTimer = Math.max(0, z.acidTimer - dt);
+            if (z.type == 5) z.hp = Math.min(z.maxHp, z.hp + z.maxHp * .018 * dt);
+            if (z.eliteModifier == 1) z.hp = Math.min(z.maxHp, z.hp + z.maxHp * .008 * dt);
+            if (z.type == 8) {
+                z.abilityCooldown -= dt;
+                if (z.abilityCooldown <= 0 && z.summons < 3) {
+                    Zombie minion = new Zombie(z.x + .2, z.y - .2, z.maxHp * .28, 1.1, 6, z.pathId, 0);
+                    minion.pathIndex = z.pathIndex; summonedZombies.add(minion); z.summons++; z.abilityCooldown = 6.0;
+                }
+            }
+            if (z.type == 9) {
+                for (int slot = 0; slot < TOWER_SLOTS.length; slot++)
+                    if (placedTowerTypes[slot] != 0 && Math.hypot(z.x - TOWER_SLOTS[slot][0], z.y - TOWER_SLOTS[slot][1]) < 2.2)
+                        platformDisabledTimer[slot] = Math.max(platformDisabledTimer[slot], 3.5);
+            }
             if (z.pathIndex >= PATHS[z.pathId].length) {
                 baseHp -= z.damage;
+                if (z.type == 10) {
+                    baseHp -= 18;
+                    for (int slot = 0; slot < platformHealth.length; slot++)
+                        if (placedTowerTypes[slot] != 0) platformHealth[slot] = Math.max(0, platformHealth[slot] - 12);
+                }
+                if (z.type == 12) { hashes = Math.max(0, hashes - 80); scrap = Math.max(0, scrap - 25); }
+                if (z.eliteModifier == 1) z.hp = Math.min(z.maxHp, z.hp + z.damage * 2);
                 zombies.remove(i);
                 if (baseHp <= 0) { baseHp = 0; gameOver = true; }
                 continue;
             }
-            double[] waypoint = routePoint(z.pathId, z.pathIndex);
+            boolean flying = z.type == 6;
+            double[] waypoint = flying ? new double[]{0, 0} : routePoint(z.pathId, z.pathIndex);
             double dx = waypoint[0] - z.x, dy = waypoint[1] - z.y;
             double d = Math.hypot(dx, dy);
             if (d < 0.22) {
+                if (flying) { z.pathIndex = PATHS[z.pathId].length; continue; }
                 if (z.pathIndex == 3 && barricadeHp > 0) {
                     barricadeHp = Math.max(0, barricadeHp - z.damage * dt * 1.8);
                     continue;
@@ -713,8 +745,9 @@ public class GameState {
             z.slowTimer = Math.max(0, z.slowTimer - dt);
             double speedMultiplier = z.slowTimer > 0 ? .48 : 1.0;
             if (weatherType == 3) speedMultiplier *= .82;
+            if (z.eliteModifier == 2) speedMultiplier *= 1.38;
             double[] hazard = routePoint(z.pathId, 3);
-            if (Math.hypot(z.x - hazard[0], z.y - hazard[1]) < 1.0) {
+            if (!flying && Math.hypot(z.x - hazard[0], z.y - hazard[1]) < 1.0) {
                 if (hazardType == 1) { z.burnTimer = Math.max(z.burnTimer, 1.2); z.burnDps = Math.max(z.burnDps, 8); }
                 else if (hazardType == 2) z.hp -= z.maxHp * .018 * dt;
                 else if (hazardType == 3) z.slowTimer = Math.max(z.slowTimer, .5);
@@ -723,6 +756,7 @@ public class GameState {
             z.x += dx / Math.max(.001, d) * z.speed * speedMultiplier * dt;
             z.y += dy / Math.max(.001, d) * z.speed * speedMultiplier * dt;
         }
+        zombies.addAll(summonedZombies);
 
         // спавн и очистка волн
         if (waveActive) {
@@ -808,7 +842,9 @@ public class GameState {
                 if (p.target.type == 2 && p.type == 13) resistance = 1.55; // рельсотрон пробивает броню
                 if (p.target.acidTimer > 0) resistance *= 1.28;
                 if (p.ammoType == 1 && p.target.type == 2) resistance *= 1.55;
+                if (hasShieldNearby(p.target)) resistance *= .62;
                 p.target.hp -= p.damage * resistance;
+                if (p.target.eliteModifier == 4) baseHp = Math.max(0, baseHp - Math.min(2.5, p.damage * .025));
                 if (p.type >= 10 && p.type < 20) p.target.lastHitManual = true;
                 if (p.type == 16 || p.ammoType == 2) {
                     p.target.burnTimer = Math.max(p.target.burnTimer, 3.5);
@@ -872,6 +908,7 @@ public class GameState {
                     manualComboTimer = 3.0;
                     hashes += Math.min(20, manualCombo * .35);
                 }
+                enemySeen[dead.type] = true; enemyKills[dead.type]++;
                 zombies.remove(i); dailyKills++;
             }
         }
@@ -906,24 +943,42 @@ public class GameState {
 
     private void spawnZombie() {
         int pathId = (int) (Math.random() * PATHS.length);
-        double[] start = routePoint(pathId, 0);
-        double sx = start[0] + (Math.random() - .5) * .22;
-        double sy = start[1] + (Math.random() - .5) * .22;
         int type = 0;
         if (wave % 10 == 0 && !bossSpawnedThisWave) { type = 4; bossSpawnedThisWave = true; }
         else {
             double roll = Math.random();
-            if (wave >= 7 && roll < .12) type = 3;
-            else if (wave >= 4 && roll < .30) type = 2;
-            else if (wave >= 2 && roll < .52) type = 1;
+            if (wave >= 22 && roll < .07) type = 12;
+            else if (wave >= 20 && roll < .14) type = 11;
+            else if (wave >= 18 && roll < .21) type = 10;
+            else if (wave >= 16 && roll < .28) type = 9;
+            else if (wave >= 14 && roll < .35) type = 8;
+            else if (wave >= 12 && roll < .42) type = 7;
+            else if (wave >= 10 && roll < .49) type = 6;
+            else if (wave >= 8 && roll < .57) type = 5;
+            else if (wave >= 7 && roll < .65) type = 3;
+            else if (wave >= 4 && roll < .78) type = 2;
+            else if (wave >= 2 && roll < .90) type = 1;
         }
+        double[] start = type == 11 ? routePoint(pathId, 2) : routePoint(pathId, 0);
+        double sx = start[0] + (Math.random() - .5) * .22;
+        double sy = start[1] + (Math.random() - .5) * .22;
         double baseHp = 10.0 * Math.pow(1.25, wave - 1);
-        double hpMult = type == 4 ? 12.0 : type == 2 ? 2.5 : type == 3 ? 1.35 : type == 1 ? .68 : 1.0;
-        double speed = type == 4 ? .72 : type == 2 ? .88 : type == 3 ? 1.08 : type == 1 ? 1.82 : 1.25;
-        double damage = type == 4 ? 35 : type == 3 ? 14 : type == 2 ? 12 : type == 1 ? 6 : 8;
-        zombies.add(new Zombie(sx, sy, baseHp * hpMult, speed, damage, pathId, type));
+        double hpMult = type == 4 ? 12.0 : type == 2 ? 2.5 : type == 5 ? 1.7 : type == 7 ? 2.0
+                : type == 8 ? 2.2 : type == 9 ? 1.3 : type == 10 ? .9 : type == 11 ? 1.2
+                : type == 12 ? .8 : type == 3 ? 1.35 : type == 1 ? .68 : type == 6 ? .85 : 1.0;
+        double speed = type == 4 ? .72 : type == 2 ? .88 : type == 5 ? 1.0 : type == 6 ? 1.45
+                : type == 7 ? .9 : type == 8 ? .75 : type == 9 ? 1.3 : type == 10 ? 1.2
+                : type == 11 ? 1.1 : type == 12 ? 1.6 : type == 3 ? 1.08 : type == 1 ? 1.82 : 1.25;
+        double damage = type == 4 ? 35 : type == 10 ? 20 : type == 3 ? 14 : type == 2 || type == 8 ? 12
+                : type == 5 || type == 11 ? 10 : type == 6 || type == 7 ? 9 : type == 9 ? 7 : type == 1 ? 6 : type == 12 ? 5 : 8;
+        Zombie zombie = new Zombie(sx, sy, baseHp * hpMult, speed, damage, pathId, type);
+        if (type == 11) zombie.pathIndex = 3;
+        if (type == 8) zombie.abilityCooldown = 4.0;
+        if (type != 4 && wave >= 8 && Math.random() < Math.min(.28, .07 + wave * .004))
+            zombie.eliteModifier = 1 + (int) (Math.random() * 4);
+        enemySeen[type] = true;
+        zombies.add(zombie);
     }
-
     private Zombie nearestZombie(double x, double y, double range) {
         Zombie best = null; double bd = range;
         for (Zombie z : zombies) {
@@ -933,12 +988,18 @@ public class GameState {
         return best;
     }
 
+    private boolean hasShieldNearby(Zombie target) {
+        for (Zombie zombie : zombies)
+            if (zombie.type == 7 && zombie.hp > 0 && Math.hypot(zombie.x - target.x, zombie.y - target.y) <= 1.8) return true;
+        return false;
+    }
+
     private Zombie findTarget(Turret turret, double range) {
         Zombie best = null;
         double bestScore = -Double.MAX_VALUE;
         for (Zombie z : zombies) {
             double distance = Math.hypot(z.x - turret.x, z.y - turret.y);
-            if (distance > range) continue;
+            if (distance > range || (z.eliteModifier == 3 && distance > 2.2)) continue;
             double score;
             if (turret.priority == 1) score = z.hp;
             else if (turret.priority == 2) score = z.speed * 100 - distance;
@@ -961,7 +1022,7 @@ public class GameState {
         List<Turret> synced = new ArrayList<>();
         for (int slot = 0; slot < placedTowerTypes.length; slot++) {
             int type = placedTowerTypes[slot];
-            if (type == 0 || platformHealth[slot] <= 0) continue;
+            if (type == 0 || platformHealth[slot] <= 0 || platformDisabledTimer[slot] > 0) continue;
             Turret turret = null;
             for (Turret old : turrets) if (old.slot == slot) { turret = old; break; }
             if (turret == null) turret = new Turret();
@@ -1073,6 +1134,9 @@ public class GameState {
             o.put("barricadeHp", barricadeHp); o.put("capturedNodes", capturedNodes);
             JSONArray platforms = new JSONArray(); for (double hp : platformHealth) platforms.put(hp);
             o.put("platformHealth", platforms);
+            JSONArray kills = new JSONArray(), seen = new JSONArray();
+            for (int i = 0; i < EnemyCatalog.COUNT; i++) { kills.put(enemyKills[i]); seen.put(enemySeen[i]); }
+            o.put("enemyKills", kills); o.put("enemySeen", seen);
             o.put("basicTurrets", basicTurrets);
             o.put("laserTurrets", laserTurrets);
             o.put("teslaTurrets", teslaTurrets);
@@ -1148,6 +1212,11 @@ public class GameState {
             capturedNodes = o.optInt("capturedNodes", 0);
             JSONArray platforms = o.optJSONArray("platformHealth");
             if (platforms != null) for (int i = 0; i < platformHealth.length; i++) platformHealth[i] = platforms.optDouble(i, 100);
+            JSONArray kills = o.optJSONArray("enemyKills"), seen = o.optJSONArray("enemySeen");
+            for (int i = 0; i < EnemyCatalog.COUNT; i++) {
+                if (kills != null) enemyKills[i] = kills.optInt(i, 0);
+                if (seen != null) enemySeen[i] = seen.optBoolean(i, false);
+            }
             basicTurrets = o.optInt("basicTurrets", 0);
             laserTurrets = o.optInt("laserTurrets", 0);
             teslaTurrets = o.optInt("teslaTurrets", 0);
@@ -1205,7 +1274,8 @@ public class GameState {
         miningMult = 0; turretMult = 0; scrapMult = 0;
         baseHp = 100; baseMaxHp = 100;
         mapId = floorLevel = gateMode = weatherType = 0; hazardType = 1; routeSeed = 7331; barricadeHp = 500; capturedNodes = 0;
-        for (int i = 0; i < platformHealth.length; i++) platformHealth[i] = 100;
+        for (int i = 0; i < platformHealth.length; i++) { platformHealth[i] = 100; platformDisabledTimer[i] = 0; }
+        for (int i = 0; i < EnemyCatalog.COUNT; i++) { enemyKills[i] = 0; enemySeen[i] = false; }
         wave = 0; waveActive = false; zombiesToSpawn = 0; spawnTimer = 0; nextWaveTimer = 2.0;
         zombies.clear(); projectiles.clear(); hitEffects.clear(); turrets.clear();
         basicTurrets = 0; laserTurrets = 0; teslaTurrets = 0; cryoTurrets = 0; rocketTurrets = 0; supportTurrets = 0;
@@ -1250,8 +1320,8 @@ public class GameState {
 
     // ===== сущности =====
     public static class Zombie {
-        double x, y, hp, maxHp, speed, damage, slowTimer, burnTimer, burnDps, acidTimer;
-        int pathId, pathIndex = 1, type;
+        double x, y, hp, maxHp, speed, damage, slowTimer, burnTimer, burnDps, acidTimer, abilityCooldown;
+        int pathId, pathIndex = 1, type, eliteModifier, summons;
         boolean lastHitManual;
         Zombie(double x, double y, double hp, double speed, double damage, int pathId, int type) {
             this.x = x; this.y = y; this.hp = hp; this.maxHp = hp; this.speed = speed; this.damage = damage;
