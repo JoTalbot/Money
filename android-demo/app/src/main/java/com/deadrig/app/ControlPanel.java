@@ -57,6 +57,8 @@ public final class ControlPanel {
         addMetric(activity, list, "ДОХОД", String.format(Locale.US, "%.1f хеш/с", state.miningRate()));
         addCard(activity, list, "Экономический комплекс", "Энергия, топливо, материалы, контракты, рынок и сеть узлов.",
                 "ОТКРЫТЬ", true, v -> { dialog.dismiss(); showEconomy(activity, state, changed); });
+        addCard(activity, list, "Оперативный профиль", "Задания, достижения, престиж, лор, сезон, оперативники и мастерство.",
+                "ОТКРЫТЬ", true, v -> { dialog.dismiss(); showMeta(activity, state, changed); });
         addCard(activity, list, "Расширить ферму",
                 "Новый ASIC-модуль увеличивает постоянную добычу.\nСтоимость: " + GameState.fmt(state.minerUpgradeCost()) + " хешей",
                 "УЛУЧШИТЬ", true, v -> result(activity, state.tryUpgradeMiner(), changed, dialog));
@@ -130,6 +132,72 @@ public final class ControlPanel {
                     null, false, null);
         }
         addHint(activity, list, "Чтобы установить башню из резерва, закройте экран и нажмите на светящуюся свободную площадку у дороги.");
+        dialog.show(); fit(dialog);
+    }
+
+    public static void showMeta(Activity activity, GameState state, OnChanged changed) {
+        Dialog dialog = create(activity, "ОПЕРАТИВНЫЙ ПРОФИЛЬ", state.operativeName());
+        LinearLayout list = content(dialog);
+        addMetric(activity, list, "ВРЕМЯ В ИГРЕ", state.totalPlayMinutes() + " мин.");
+        addMetric(activity, list, "УБИЙСТВА / БОССЫ", state.totalKills() + " / " + state.totalBossKills());
+        addMetric(activity, list, "ВЫСТРЕЛЫ / HEADSHOT", state.totalShots() + " / " + state.totalHeadshots());
+        addMetric(activity, list, "ДОСТИЖЕНИЯ", state.achievementCount() + "/8");
+        addMetric(activity, list, "ЛОР", state.loreUnlockedCount() + "/16");
+        addMetric(activity, list, "СЕЗОН", state.seasonName() + "  •  " + state.seasonPoints() + "/250");
+
+        addHint(activity, list, "ЕЖЕДНЕВНЫЕ ЗАДАНИЯ");
+        addCard(activity, list, "Охотник", "Уничтожить 50 зомби. Награда: 40 лома.\n" + state.dailyStatus(), "ЗАБРАТЬ", true,
+                v -> result(activity, state.claimDailyTask(0), changed, dialog));
+        addCard(activity, list, "Защитник", "Пройти 5 волн. Награда: 2 кристалла.", "ЗАБРАТЬ", true,
+                v -> result(activity, state.claimDailyTask(1), changed, dialog));
+        addCard(activity, list, "Стрелок", "Сделать 100 ручных выстрелов. Награда: 20 науки.", "ЗАБРАТЬ", true,
+                v -> result(activity, state.claimDailyTask(2), changed, dialog));
+        addHint(activity, list, "ЕЖЕНЕДЕЛЬНЫЙ КОНТРАКТ");
+        addCard(activity, list, "Большая зачистка", state.weeklyStatus() + "\nНаграда: 15 кристаллов, 2 чертежа, очко престижа.",
+                "ЗАБРАТЬ", state.weeklyReady(), v -> result(activity, state.claimWeeklyReward(), changed, dialog));
+        addCard(activity, list, "Календарь входа  //  день " + state.loginStreak(),
+                "Каждый 7-й день дополнительно выдаёт 5 кристаллов.", state.loginRewardClaimed() ? null : "ЗАБРАТЬ",
+                !state.loginRewardClaimed(), v -> result(activity, state.claimLoginReward(), changed, dialog));
+
+        String[] achievements = {"100 убийств", "1000 убийств", "Волна 25", "Волна 50", "100 headshot", "10 боссов", "Престиж 3", "Легендарный комплект"};
+        addHint(activity, list, "ДОСТИЖЕНИЯ");
+        for (int i = 0; i < achievements.length; i++)
+            addCard(activity, list, (state.achievementUnlocked(i) ? "ВЫПОЛНЕНО  //  " : "") + achievements[i],
+                    state.achievementUnlocked(i) ? "Награда получена: кристаллы и очко престижа." : "Продолжайте развивать профиль.", null, false, null);
+
+        addHint(activity, list, "ДЕРЕВО ПРЕСТИЖА  //  ОЧКИ " + state.prestigePoints());
+        addCard(activity, list, "Сетевая экспансия  ур." + state.prestigeTreeLevel(0), "+5% дохода за уровень.", "УЛУЧШИТЬ", true,
+                v -> result(activity, state.upgradePrestigeTree(0), changed, dialog));
+        addCard(activity, list, "Военная доктрина  ур." + state.prestigeTreeLevel(1), "+5% урона за уровень.", "УЛУЧШИТЬ", true,
+                v -> result(activity, state.upgradePrestigeTree(1), changed, dialog));
+        addCard(activity, list, "Научное наследие  ур." + state.prestigeTreeLevel(2), "+6% науки за уровень.", "УЛУЧШИТЬ", true,
+                v -> result(activity, state.upgradePrestigeTree(2), changed, dialog));
+
+        addHint(activity, list, "ОПЕРАТИВНИКИ");
+        String[] operators = {"Оператор Ноль — баланс", "Штурмовик Рэй — +15% ручной урон", "Инженер Мира — +15% башни", "Доктор Вейл — +25% науки"};
+        for (int i = 0; i < operators.length; i++) {
+            final int operator = i;
+            addCard(activity, list, operators[i], state.operativeUnlocked(i) ? "Доступен" : "Открывается достижениями или за кристаллы.",
+                    i == state.selectedOperative() ? null : state.operativeUnlocked(i) ? "ВЫБРАТЬ" : "НАНЯТЬ", true,
+                    v -> result(activity, state.unlockOrSelectOperative(operator), changed, dialog));
+        }
+
+        addHint(activity, list, "МАСТЕРСТВО ОРУЖИЯ");
+        for (int i = 0; i < WeaponCatalog.COUNT; i++) if (state.ownsWeapon(i))
+            addMetric(activity, list, WeaponCatalog.NAMES[i], "ур." + state.weaponMasteryLevel(i));
+        addHint(activity, list, "МАСТЕРСТВО БАШЕН");
+        String[] towers = {"", "Пулемёт", "Лазер", "Тесла", "Крио", "Ракеты", "Поддержка"};
+        for (int i = 1; i < towers.length; i++) addMetric(activity, list, towers[i], "ур." + state.towerMasteryLevel(i));
+
+        addHint(activity, list, "АРХИВ МИРА");
+        String[] lore = {"Пробуждение Узла 07", "Первые сигналы", "Красный каньон", "Проект DeadRig", "Падение лаборатории",
+                "Мясной титан", "Механический некромант", "Кислотная матка", "Глубокий сектор", "Источник сигнала",
+                "Протокол эвакуации", "Сеть мёртвых узлов", "Последний оператор", "Причина заражения", "Орбитальный комплекс", "Последний протокол"};
+        for (int i = 0; i < lore.length; i++) addCard(activity, list, state.loreUnlocked(i) ? lore[i] : "ЗАПИСЬ ЗАШИФРОВАНА",
+                state.loreUnlocked(i) ? "Фрагмент истории восстановлен." : "Продвигайтесь по кампании и уничтожайте боссов.", null, false, null);
+
+        addCard(activity, list, "Сезонная награда", "Накопите 250 очков за убийства и волны.", "ЗАБРАТЬ", state.seasonPoints() >= 250,
+                v -> result(activity, state.claimSeasonReward(), changed, dialog));
         dialog.show(); fit(dialog);
     }
 

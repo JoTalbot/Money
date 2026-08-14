@@ -68,6 +68,26 @@ public class GameState {
     private int dailyWaves = 0;
     private int dailyShots = 0;
     private boolean dailyClaimed = false;
+    private int dailyClaimMask = 0;
+    private String weekKey = "";
+    private int weeklyKills = 0, weeklyWaves = 0, weeklyBosses = 0;
+    private boolean weeklyClaimed = false;
+    private int achievementMask = 0;
+    private String lastLoginDay = "";
+    private int loginStreak = 0;
+    private boolean loginRewardClaimed = false;
+    private int prestigePoints = 0;
+    private final int[] prestigeTree = new int[3]; // доход, урон, наука
+    private int loreMask = 1;
+    private String seasonKey = "";
+    private int seasonPoints = 0;
+    private boolean seasonRewardClaimed = false;
+    private int selectedOperative = 0;
+    private int unlockedOperativesMask = 1;
+    private long totalKills = 0, totalShots = 0, totalHeadshots = 0, totalBossKills = 0;
+    private double totalPlaySeconds = 0;
+    private final double[] weaponMasteryXp = new double[WeaponCatalog.COUNT];
+    private final double[] towerMasteryXp = new double[7];
 
     // --- бонусы исследований ---
     public double miningMult = 0;
@@ -229,6 +249,7 @@ public class GameState {
         load();
         ensureWeaponRolls();
         checkDailyReset();
+        checkMetaDates();
         if (placedTowerCount() == 0) placedTowerTypes[0] = 1;
         for (int i = 0; i < towerLevels.length; i++) {
             if (placedTowerTypes[i] != 0 && towerLevels[i] == 0) towerLevels[i] = 1;
@@ -261,7 +282,7 @@ public class GameState {
         double specialization = baseSpecialization == 1 ? 1.25 : 1.0;
         return 1.0 * minerLevel * (1 + miningMult) * (1 + prestigeLevel * .5)
                 * (1 + capturedNodes * .15 + networkNodes * .10 + repeatableScience[0] * .03 + prestigeScienceLevel * .04
-                + inventoryModifierCount(2) * .01) * energyFactor * durabilityFactor * specialization;
+                + inventoryModifierCount(2) * .01 + prestigeTree[0] * .05) * energyFactor * durabilityFactor * specialization;
     }
     public double energy() { return energy; }
     public double maxEnergy() { return maxEnergy; }
@@ -488,10 +509,79 @@ public class GameState {
         dailyClaimed = true; crystals += 5; scrap += 75;
         return "Ежедневная награда: +5 кристаллов и +75 лома";
     }
+    public String claimDailyTask(int task) {
+        checkDailyReset();
+        boolean ready = task == 0 ? dailyKills >= 50 : task == 1 ? dailyWaves >= 5 : dailyShots >= 100;
+        if (!ready) return "Задание ещё не выполнено";
+        if ((dailyClaimMask & (1 << task)) != 0) return "Награда уже получена";
+        dailyClaimMask |= 1 << task;
+        if (task == 0) scrap += 40; else if (task == 1) crystals += 2; else sciencePoints += 20;
+        return "Награда ежедневного задания получена";
+    }
+    public String weeklyStatus() { checkMetaDates(); return "Убийства " + weeklyKills + "/500 • волны " + weeklyWaves + "/35 • боссы " + weeklyBosses + "/3"; }
+    public boolean weeklyReady() { return weeklyKills >= 500 && weeklyWaves >= 35 && weeklyBosses >= 3 && !weeklyClaimed; }
+    public String claimWeeklyReward() {
+        if (!weeklyReady()) return "Еженедельная цель не выполнена";
+        weeklyClaimed = true; crystals += 15; blueprints += 2; prestigePoints++;
+        return "Награда недели: 15 кристаллов, 2 чертежа и очко престижа";
+    }
+    public int loginStreak() { return loginStreak; }
+    public boolean loginRewardClaimed() { return loginRewardClaimed; }
+    public String claimLoginReward() {
+        checkMetaDates(); if (loginRewardClaimed) return "Награда за вход уже получена";
+        loginRewardClaimed = true; hashes += 50 * loginStreak; scrap += 10 * loginStreak;
+        if (loginStreak % 7 == 0) crystals += 5;
+        return "Награда за день " + loginStreak + " получена";
+    }
+    public int achievementCount() { return Integer.bitCount(achievementMask); }
+    public boolean achievementUnlocked(int index) { return index >= 0 && index < 8 && (achievementMask & (1 << index)) != 0; }
+    public boolean loreUnlocked(int index) { return index >= 0 && index < 16 && (loreMask & (1 << index)) != 0; }
+    public int prestigePoints() { return prestigePoints; }
+    public int prestigeTreeLevel(int branch) { return branch >= 0 && branch < 3 ? prestigeTree[branch] : 0; }
+    public String upgradePrestigeTree(int branch) {
+        if (branch < 0 || branch > 2) return "Ветка не найдена";
+        int cost = prestigeTree[branch] + 1;
+        if (prestigePoints < cost) return "Нужно " + cost + " очков престижа";
+        prestigePoints -= cost; prestigeTree[branch]++; return "Ветка престижа улучшена";
+    }
+    public int loreUnlockedCount() { return Integer.bitCount(loreMask); }
+    public int seasonPoints() { return seasonPoints; }
+    public String seasonName() {
+        int month = Integer.parseInt(new SimpleDateFormat("MM", Locale.US).format(new Date()));
+        return month <= 2 || month == 12 ? "Ледяная ночь" : month <= 5 ? "Биорасцвет" : month <= 8 ? "Красная жара" : "ЭМ-затмение";
+    }
+    public String claimSeasonReward() {
+        if (seasonRewardClaimed) return "Сезонная награда уже получена";
+        if (seasonPoints < 250) return "Нужно 250 сезонных очков";
+        seasonRewardClaimed = true; crystals += 25; blueprints += 3;
+        return "Сезонная награда получена";
+    }
+    public int selectedOperative() { return selectedOperative; }
+    public boolean operativeUnlocked(int type) { return (unlockedOperativesMask & (1 << type)) != 0; }
+    public String operativeName() {
+        String[] names = {"Оператор Ноль", "Штурмовик Рэй", "Инженер Мира", "Доктор Вейл"}; return names[selectedOperative];
+    }
+    public String unlockOrSelectOperative(int type) {
+        if (type < 0 || type > 3) return "Оперативник не найден";
+        if (!operativeUnlocked(type)) {
+            double cost = 8 + type * 6;
+            if (crystals < cost) return "Нужно " + fmt(cost) + " кристаллов";
+            crystals -= (long) cost; unlockedOperativesMask |= 1 << type;
+        }
+        selectedOperative = type; return "Выбран: " + operativeName();
+    }
+    public long totalKills() { return totalKills; }
+    public long totalShots() { return totalShots; }
+    public long totalHeadshots() { return totalHeadshots; }
+    public long totalBossKills() { return totalBossKills; }
+    public long totalPlayMinutes() { return (long) (totalPlaySeconds / 60); }
+    public int weaponMasteryLevel(int type) { return 1 + (int) Math.sqrt(weaponMasteryXp[WeaponCatalog.clamp(type)] / 80.0); }
+    public int towerMasteryLevel(int type) { return type >= 0 && type < towerMasteryXp.length ? 1 + (int) Math.sqrt(towerMasteryXp[type] / 100.0) : 1; }
+
     public String tryPrestige() {
         if (activeResearchCount() > 0 || activeCraftId != null) return "Сначала завершите исследования и производство";
         if (hashes < prestigeRequirement()) return "Нужно " + fmt(prestigeRequirement()) + " хешей";
-        prestigeLevel++;
+        prestigeLevel++; prestigePoints += 1 + prestigeLevel / 3; evaluateAchievements();
         hashes = 0; scrap = 0; minerLevel = 1; turretLevel = 1; manualWeaponLevel = 1;
         energy = maxEnergy = 100; fuel = 20; generatorLevel = 1; metal = electronics = biomass = 0;
         collectorDroneLevel = 0; activeContractType = -1; contractTimer = investmentAmount = investmentTimer = 0; minerDurability = 100;
@@ -540,7 +630,8 @@ public class GameState {
         return WeaponCatalog.DAMAGE[type] * WeaponCatalog.RARITY_MULT[weaponRarity[type]] * weaponDamageRoll[type]
                 * (1 + (manualWeaponLevel - 1) * .35) * (1 + damageModuleLevel * .12)
                 * (scienceDoctrine == 1 ? 1.15 : 1.0) * (legendarySetActive() ? 1.25 : 1.0)
-                * (1 + inventoryModifierCount(0) * .02);
+                * (1 + inventoryModifierCount(0) * .02 + prestigeTree[1] * .05)
+                * (selectedOperative == 1 ? 1.15 : 1.0) * (1 + (weaponMasteryLevel(type) - 1) * .02);
     }
     public double manualUpgradeCost() { return 20.0 * Math.pow(1.7, manualWeaponLevel - 1); }
     public int turretCount() { return placedTowerCount(); }
@@ -745,7 +836,9 @@ public class GameState {
         manualHeat = Math.min(1.2, manualHeat + heatGain);
         if (manualHeat >= 1.0) manualOverheated = true;
         if (manualAmmo <= 0) startManualReload();
-        dailyShots++;
+        dailyShots++; totalShots++;
+        if (headshot) totalHeadshots++;
+        weaponMasteryXp[weapon] += headshot ? 2.0 : 1.0;
         double projectileSpeed = weapon == 3 || weapon == 4 ? 30 : weapon == 5 ? 10 : weapon == 6 ? 12 : 18;
         Projectile shot = new Projectile(0, 0, target, damage, projectileSpeed, 10 + weapon);
         shot.critical = critical;
@@ -1057,6 +1150,7 @@ public class GameState {
                 hashes += investmentAmount * multiplier; investmentAmount = 0; investmentTimer = 0;
             }
         }
+        totalPlaySeconds += dt;
         hashes += miningRate() * dt;
         if (weatherType == 2 && waveActive) baseHp = Math.max(0, baseHp - .08 * dt);
 
@@ -1152,7 +1246,9 @@ public class GameState {
             }
             if (zombiesToSpawn <= 0 && zombies.isEmpty()) {
                 waveActive = false;
-                dailyWaves++;
+                dailyWaves++; weeklyWaves++; seasonPoints += 5;
+                loreMask |= 1 << Math.min(15, campaignChapter());
+                evaluateAchievements();
                 int damagedSlot = (int) (Math.random() * TOWER_SLOTS.length);
                 if (placedTowerTypes[damagedSlot] != 0) platformHealth[damagedSlot] = Math.max(0, platformHealth[damagedSlot] - 15 - wave * .5);
                 double rewardMult = (difficulty == 2 ? 2.2 : difficulty == 1 ? 1.5 : 1.0)
@@ -1186,7 +1282,8 @@ public class GameState {
                     double supportBoost = 1 + nearbySupportCount(t.x, t.y) * .18;
                     double specializationBoost = (baseSpecialization == 2 ? 1.20 : 1.0)
                             * (1 + repeatableScience[1] * .03) * (scienceDoctrine == 1 ? 1.15 : 1.0)
-                            * (legendarySetActive() ? 1.25 : 1.0);
+                            * (legendarySetActive() ? 1.25 : 1.0) * (1 + prestigeTree[1] * .05)
+                            * (selectedOperative == 2 ? 1.15 : 1.0) * (1 + (towerMasteryLevel(t.type) - 1) * .02);
                     double dmg = 10.0 * turretLevel * t.level * (1 + turretMult) * typeDamage * branchDamage * supportBoost * specializationBoost;
                     double speed = t.type == 5 ? 8 : t.type == 3 ? 10 : t.type == 4 ? 12 : 14;
                     Projectile projectile = new Projectile(t.x, t.y, target, dmg, speed, t.type);
@@ -1237,6 +1334,7 @@ public class GameState {
                 if (p.ammoType == 1 && p.target.type == 2) resistance *= 1.55;
                 if (hasShieldNearby(p.target)) resistance *= .62;
                 p.target.hp -= p.damage * resistance;
+                p.target.lastDamageType = p.type;
                 if (p.target.eliteModifier == 4) baseHp = Math.max(0, baseHp - Math.min(2.5, p.damage * .025));
                 if (p.type >= 10 && p.type < 20) p.target.lastHitManual = true;
                 if (p.type == 16 || p.ammoType == 2) {
@@ -1302,8 +1400,18 @@ public class GameState {
                     hashes += Math.min(20, manualCombo * .35);
                 }
                 enemySeen[dead.type] = true; enemyKills[dead.type]++;
-                sciencePoints += dead.type == 4 ? 18 : dead.type >= 5 ? 2.5 : 1;
-                if (dead.type == 4) { bossSamples++; blueprints++; }
+                double scienceGain = dead.type == 4 ? 18 : dead.type >= 5 ? 2.5 : 1;
+                sciencePoints += scienceGain * (1 + prestigeTree[2] * .06) * (selectedOperative == 3 ? 1.25 : 1.0);
+                totalKills++; weeklyKills++; seasonPoints += dead.type == 4 ? 15 : 1;
+                if (dead.lastDamageType >= 10 && dead.lastDamageType < 20)
+                    weaponMasteryXp[dead.lastDamageType - 10] += dead.type == 4 ? 25 : 6;
+                else if (dead.lastDamageType >= 1 && dead.lastDamageType <= 6)
+                    towerMasteryXp[dead.lastDamageType] += dead.type == 4 ? 25 : 6;
+                if (dead.type == 4) {
+                    bossSamples++; blueprints++; weeklyBosses++; totalBossKills++;
+                    loreMask |= 1 << Math.min(15, 1 + bossVariant + campaignChapter());
+                }
+                evaluateAchievements();
                 zombies.remove(i); dailyKills++;
             }
         }
@@ -1528,8 +1636,36 @@ public class GameState {
         format.setTimeZone(TimeZone.getTimeZone("UTC"));
         String today = format.format(new Date());
         if (!today.equals(dailyKey)) {
-            dailyKey = today; dailyKills = 0; dailyWaves = 0; dailyShots = 0; dailyClaimed = false;
+            dailyKey = today; dailyKills = 0; dailyWaves = 0; dailyShots = 0; dailyClaimed = false; dailyClaimMask = 0;
         }
+    }
+
+    private void checkMetaDates() {
+        TimeZone utc = TimeZone.getTimeZone("UTC");
+        SimpleDateFormat dayFormat = new SimpleDateFormat("yyyy-MM-dd", Locale.US); dayFormat.setTimeZone(utc);
+        SimpleDateFormat weekFormat = new SimpleDateFormat("yyyy-ww", Locale.US); weekFormat.setTimeZone(utc);
+        SimpleDateFormat monthFormat = new SimpleDateFormat("yyyy-MM", Locale.US); monthFormat.setTimeZone(utc);
+        String today = dayFormat.format(new Date()), week = weekFormat.format(new Date()), month = monthFormat.format(new Date());
+        if (!today.equals(lastLoginDay)) { loginStreak = Math.max(1, loginStreak + 1); lastLoginDay = today; loginRewardClaimed = false; }
+        if (!week.equals(weekKey)) { weekKey = week; weeklyKills = weeklyWaves = weeklyBosses = 0; weeklyClaimed = false; }
+        if (!month.equals(seasonKey)) { seasonKey = month; seasonPoints = 0; seasonRewardClaimed = false; }
+    }
+
+    private void evaluateAchievements() {
+        int before = achievementMask;
+        if (totalKills >= 100) achievementMask |= 1;
+        if (totalKills >= 1000) achievementMask |= 1 << 1;
+        if (maxWaveReached >= 25) achievementMask |= 1 << 2;
+        if (maxWaveReached >= 50) achievementMask |= 1 << 3;
+        if (totalHeadshots >= 100) achievementMask |= 1 << 4;
+        if (totalBossKills >= 10) achievementMask |= 1 << 5;
+        if (prestigeLevel >= 3) achievementMask |= 1 << 6;
+        if (legendarySetActive()) achievementMask |= 1 << 7;
+        int gained = Integer.bitCount(achievementMask) - Integer.bitCount(before);
+        if (gained > 0) { crystals += gained * 3L; prestigePoints += gained; }
+        if (achievementCount() >= 3) unlockedOperativesMask |= 1 << 1;
+        if (achievementCount() >= 5) unlockedOperativesMask |= 1 << 2;
+        if (achievementCount() >= 7) unlockedOperativesMask |= 1 << 3;
     }
 
     // ===== сохранение/загрузка =====
@@ -1570,7 +1706,20 @@ public class GameState {
             o.put("dailyKills", dailyKills);
             o.put("dailyWaves", dailyWaves);
             o.put("dailyShots", dailyShots);
-            o.put("dailyClaimed", dailyClaimed);
+            o.put("dailyClaimed", dailyClaimed); o.put("dailyClaimMask", dailyClaimMask);
+            o.put("weekKey", weekKey); o.put("weeklyKills", weeklyKills); o.put("weeklyWaves", weeklyWaves);
+            o.put("weeklyBosses", weeklyBosses); o.put("weeklyClaimed", weeklyClaimed); o.put("achievementMask", achievementMask);
+            o.put("lastLoginDay", lastLoginDay); o.put("loginStreak", loginStreak); o.put("loginRewardClaimed", loginRewardClaimed);
+            o.put("prestigePoints", prestigePoints); o.put("loreMask", loreMask); o.put("seasonKey", seasonKey);
+            o.put("seasonPoints", seasonPoints); o.put("seasonRewardClaimed", seasonRewardClaimed);
+            o.put("selectedOperative", selectedOperative); o.put("unlockedOperativesMask", unlockedOperativesMask);
+            o.put("totalKills", totalKills); o.put("totalShots", totalShots); o.put("totalHeadshots", totalHeadshots);
+            o.put("totalBossKills", totalBossKills); o.put("totalPlaySeconds", totalPlaySeconds);
+            JSONArray prestigeTreeJson = new JSONArray(), weaponMastery = new JSONArray(), towerMastery = new JSONArray();
+            for (int level : prestigeTree) prestigeTreeJson.put(level);
+            for (double xp : weaponMasteryXp) weaponMastery.put(xp);
+            for (double xp : towerMasteryXp) towerMastery.put(xp);
+            o.put("prestigeTree", prestigeTreeJson); o.put("weaponMasteryXp", weaponMastery); o.put("towerMasteryXp", towerMastery);
             o.put("miningMult", miningMult);
             o.put("turretMult", turretMult);
             o.put("scrapMult", scrapMult);
@@ -1679,7 +1828,23 @@ public class GameState {
             dailyKills = o.optInt("dailyKills", 0);
             dailyWaves = o.optInt("dailyWaves", 0);
             dailyShots = o.optInt("dailyShots", 0);
-            dailyClaimed = o.optBoolean("dailyClaimed", false);
+            dailyClaimed = o.optBoolean("dailyClaimed", false); dailyClaimMask = o.optInt("dailyClaimMask", 0);
+            weekKey = o.optString("weekKey", ""); weeklyKills = o.optInt("weeklyKills", 0);
+            weeklyWaves = o.optInt("weeklyWaves", 0); weeklyBosses = o.optInt("weeklyBosses", 0);
+            weeklyClaimed = o.optBoolean("weeklyClaimed", false); achievementMask = o.optInt("achievementMask", 0);
+            lastLoginDay = o.optString("lastLoginDay", ""); loginStreak = o.optInt("loginStreak", 0);
+            loginRewardClaimed = o.optBoolean("loginRewardClaimed", false); prestigePoints = o.optInt("prestigePoints", 0);
+            loreMask = o.optInt("loreMask", 1); seasonKey = o.optString("seasonKey", "");
+            seasonPoints = o.optInt("seasonPoints", 0); seasonRewardClaimed = o.optBoolean("seasonRewardClaimed", false);
+            selectedOperative = o.optInt("selectedOperative", 0); unlockedOperativesMask = o.optInt("unlockedOperativesMask", 1);
+            totalKills = o.optLong("totalKills", 0); totalShots = o.optLong("totalShots", 0);
+            totalHeadshots = o.optLong("totalHeadshots", 0); totalBossKills = o.optLong("totalBossKills", 0);
+            totalPlaySeconds = o.optDouble("totalPlaySeconds", 0);
+            JSONArray prestigeTreeJson = o.optJSONArray("prestigeTree"), weaponMastery = o.optJSONArray("weaponMasteryXp");
+            JSONArray towerMastery = o.optJSONArray("towerMasteryXp");
+            if (prestigeTreeJson != null) for (int i = 0; i < prestigeTree.length; i++) prestigeTree[i] = prestigeTreeJson.optInt(i, 0);
+            if (weaponMastery != null) for (int i = 0; i < weaponMasteryXp.length; i++) weaponMasteryXp[i] = weaponMastery.optDouble(i, 0);
+            if (towerMastery != null) for (int i = 0; i < towerMasteryXp.length; i++) towerMasteryXp[i] = towerMastery.optDouble(i, 0);
             miningMult = o.optDouble("miningMult", 0);
             turretMult = o.optDouble("turretMult", 0);
             scrapMult = o.optDouble("scrapMult", 0);
@@ -1789,7 +1954,13 @@ public class GameState {
             weaponRarity[i] = 0; weaponDamageRoll[i] = weaponSpeedRoll[i] = weaponCritRoll[i] = 0;
         }
         ensureWeaponRolls();
-        dailyKey = ""; dailyKills = dailyWaves = dailyShots = 0; dailyClaimed = false;
+        dailyKey = weekKey = lastLoginDay = seasonKey = ""; dailyKills = dailyWaves = dailyShots = dailyClaimMask = 0; dailyClaimed = false;
+        weeklyKills = weeklyWaves = weeklyBosses = 0; weeklyClaimed = false; achievementMask = 0; loginStreak = 0; loginRewardClaimed = false;
+        prestigePoints = 0; loreMask = 1; seasonPoints = 0; seasonRewardClaimed = false;
+        selectedOperative = 0; unlockedOperativesMask = 1; totalKills = totalShots = totalHeadshots = totalBossKills = 0; totalPlaySeconds = 0;
+        for (int i = 0; i < prestigeTree.length; i++) prestigeTree[i] = 0;
+        for (int i = 0; i < weaponMasteryXp.length; i++) weaponMasteryXp[i] = 0;
+        for (int i = 0; i < towerMasteryXp.length; i++) towerMasteryXp[i] = 0;
         miningMult = 0; turretMult = 0; scrapMult = 0;
         baseHp = 100; baseMaxHp = 100;
         mapId = floorLevel = gateMode = weatherType = 0; hazardType = 1; routeSeed = 7331; barricadeHp = 500; capturedNodes = 0;
@@ -1862,7 +2033,7 @@ public class GameState {
 
     public static class Zombie {
         double x, y, hp, maxHp, speed, damage, slowTimer, burnTimer, burnDps, acidTimer, abilityCooldown;
-        int pathId, pathIndex = 1, type, eliteModifier, summons, bossPhase;
+        int pathId, pathIndex = 1, type, eliteModifier, summons, bossPhase, lastDamageType;
         boolean lastHitManual;
         Zombie(double x, double y, double hp, double speed, double damage, int pathId, int type) {
             this.x = x; this.y = y; this.hp = hp; this.maxHp = hp; this.speed = speed; this.damage = damage;
